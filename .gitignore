@@ -3,3 +3,4 @@ node_modules/
 .wxt/
 *.js.map
 .DS_Store
+.idea/

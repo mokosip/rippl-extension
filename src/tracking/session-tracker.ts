@@ -57,7 +57,27 @@ export class SessionTracker {
     const endedAt = Date.now();
     const activeSeconds = Math.round((endedAt - a.startedAt) / 1000);
 
-    if (activeSeconds < MIN_SESSION_SECONDS) return;
+    if (activeSeconds < MIN_SESSION_SECONDS) {
+      console.log("[rippl] session discarded (too short)", a.domain, `${activeSeconds}s`);
+      return;
+    }
+
+    console.log("[rippl] session saved", a.domain, `${activeSeconds}s`, a.id);
+
+    const mins = Math.round(activeSeconds / 60);
+    const duration = mins < 1 ? "<1 min" : `${mins} min`;
+    try {
+      await chrome.notifications.create(`rippl-${Date.now()}`, {
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icon/128.png"),
+        title: `Tracked ${duration} on ${a.domain}`,
+        message: "Click the rippl icon to log what you did.",
+        priority: 0,
+      });
+      console.log("[rippl] notification sent");
+    } catch (e) {
+      console.error("[rippl] notification failed", e);
+    }
 
     const session: Session = {
       id: a.id,

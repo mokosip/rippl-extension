@@ -5,6 +5,7 @@ import { db } from "@/db/index";
 import { pruneOldSessions } from "@/db/queries";
 
 export default defineBackground(() => {
+  console.log("[rippl] service worker started");
   const tracker = new SessionTracker();
   const HEARTBEAT_ALARM = "rippl-heartbeat";
   const IDLE_THRESHOLD = 300; // 5 min
@@ -26,6 +27,7 @@ export default defineBackground(() => {
       const tab = await chrome.tabs.get(tabId);
       const customDomains = await db.customDomains.toArray();
       const domain = tab.url ? matchAIDomain(tab.url, customDomains) : null;
+      console.log("[rippl] tab →", tab.url?.slice(0, 60), domain ? `✓ ${domain}` : "✗ not AI");
       await tracker.onTabFocused(domain);
 
       if (domain) {
@@ -54,12 +56,18 @@ export default defineBackground(() => {
   chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === HEARTBEAT_ALARM) {
       tracker.onHeartbeat();
+      const active = tracker.getActiveSession();
+      if (active) {
+        const secs = Math.round((Date.now() - active.startedAt) / 1000);
+        console.log("[rippl] ♥ heartbeat", active.domain, `${secs}s`);
+      }
     }
   });
 
   chrome.idle.setDetectionInterval(IDLE_THRESHOLD);
 
   chrome.idle.onStateChanged.addListener(async (newState) => {
+    console.log("[rippl] idle state →", newState);
     if (newState === "idle" || newState === "locked") {
       await tracker.onIdle();
       await chrome.alarms.clear(HEARTBEAT_ALARM);
