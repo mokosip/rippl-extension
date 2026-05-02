@@ -29,26 +29,67 @@ export default defineBackground(() => {
       console.error("[rippl] notification failed", e);
     }
 
-    // Toast (if enabled) — retry up to 3 times to find a valid tab
+    // Toast (if enabled) — inject directly via chrome.scripting
     const toastConfig = await db.config.get("toastEnabled");
     if (toastConfig?.value === true) {
-      const toastMsg = { type: "rippl-toast", domain: session.domain, duration };
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) await new Promise(r => setTimeout(r, 500));
-        try {
-          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-          const url = activeTab?.url ?? "";
-          if (!activeTab?.id || url.startsWith("chrome://") || url.startsWith("about:") || url.startsWith("chrome-extension://")) {
-            console.log("[rippl] toast skip (non-injectable tab)", url.slice(0, 60));
-            continue;
+      const popupUrl = chrome.runtime.getURL("/popup.html");
+      const injectToast = async () => {
+        const delays = [500, 1500, 3000];
+        for (const delay of delays) {
+          await new Promise(r => setTimeout(r, delay));
+          try {
+            const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const url = activeTab?.url ?? "";
+            if (!activeTab?.id || !/^https?:\/\//.test(url)) {
+              console.log("[rippl] toast skip (non-injectable)", url.slice(0, 50));
+              continue;
+            }
+            await chrome.scripting.executeScript({
+              target: { tabId: activeTab.id },
+              func: (domain: string, dur: string) => {
+                const host = document.createElement("div");
+                const shadow = host.attachShadow({ mode: "closed" });
+                shadow.innerHTML = `
+                  <style>
+                    :host { all: initial; position: fixed; bottom: 24px; right: 24px; z-index: 2147483647; }
+                    .t { font-family: Inter,ui-sans-serif,system-ui,sans-serif; background: #EFEAE0; color: #1F1C16;
+                         border: 1px solid #D8CFB9; border-left: 3px solid #5C7A52; border-radius: 8px;
+                         padding: 10px 16px; font-size: 13px; font-weight: 500; line-height: 1.4;
+                         box-shadow: 0 4px 12px rgba(0,0,0,.1); cursor: pointer; max-width: 280px;
+                         opacity: 0; transform: translateY(8px); animation: ri .25s ease forwards; }
+                    .t:hover { border-left-color: #3F5639; box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+                    .lb { color: #8C8478; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+                    .ac { color: #5C7A52; font-size: 12px; font-weight: 500; margin-top: 4px; }
+                    .t:hover .ac { color: #3F5639; }
+                    .fo { animation: ro .3s ease forwards; }
+                    @keyframes ri { to { opacity: 1; transform: translateY(0); } }
+                    @keyframes ro { to { opacity: 0; transform: translateY(8px); } }
+                  </style>
+                  <div class="t">
+                    <div class="lb">rippl</div>
+                    <div>Tracked ${dur} on ${domain}</div>
+                    <div class="ac">Log what you did →</div>
+                  </div>`;
+                document.body.appendChild(host);
+                shadow.querySelector(".t")!.addEventListener("click", () => {
+                  chrome.runtime.sendMessage({ type: "rippl-open-popup" });
+                  host.remove();
+                });
+                setTimeout(() => {
+                  const t = shadow.querySelector(".t");
+                  if (t) { t.classList.add("fo"); t.addEventListener("animationend", () => host.remove()); }
+                }, 7000);
+              },
+              args: [session.domain, duration],
+            });
+            console.log("[rippl] toast injected on", url.slice(0, 60));
+            return;
+          } catch (e) {
+            console.log("[rippl] toast inject failed", (e as Error).message);
           }
-          await chrome.tabs.sendMessage(activeTab.id, toastMsg);
-          console.log("[rippl] toast sent to", url.slice(0, 60));
-          break;
-        } catch (e) {
-          console.log("[rippl] toast attempt", attempt + 1, "failed", (e as Error).message);
         }
-      }
+      };
+      injectToast();
     }
   };
 
@@ -118,6 +159,14 @@ export default defineBackground(() => {
     } else if (newState === "active") {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (activeTab?.id) await handleTabChange(activeTab.id);
+    }
+  });
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === "rippl-open-popup") {
+      chrome.action.openPopup().catch(() => {
+        chrome.tabs.create({ url: chrome.runtime.getURL("/popup.html") });
+      });
     }
   });
 
