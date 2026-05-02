@@ -148,7 +148,7 @@ ctaBtn.addEventListener("click", async () => {
     });
   }
 
-  // 5. Handle toast opt-in
+  // 5. Handle toast opt-in/out
   if (toastCheckbox.checked) {
     try {
       const granted = await chrome.permissions.request({
@@ -160,6 +160,8 @@ ctaBtn.addEventListener("click", async () => {
     } catch (e) {
       console.error("[rippl] permission request failed", e);
     }
+  } else {
+    await db.config.put({ key: "toastEnabled", value: false });
   }
 
   // 6. Close tab

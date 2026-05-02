@@ -179,6 +179,7 @@ function showPrompt(session: {
   id: string;
   activeSeconds: number;
   domain: string;
+  startedAt: number;
 }): void {
   currentSession = session;
   selectedActivity = null;
@@ -186,7 +187,8 @@ function showPrompt(session: {
 
   const mins = Math.round(session.activeSeconds / 60);
   const label = domainLabel(session.domain);
-  promptHeadline.textContent = `You just spent ${formatDuration(session.activeSeconds)} on ${label}`;
+  const time = formatTime(session.startedAt);
+  promptHeadline.textContent = `${formatDuration(session.activeSeconds)} on ${label} at ${time}`;
 
   // Reset pill selections
   activityPills
@@ -225,6 +227,7 @@ async function tryLog(): Promise<void> {
       id: next.id,
       activeSeconds: next.activeSeconds,
       domain: next.domain,
+      startedAt: next.startedAt,
     });
   } else {
     await renderSummary();
@@ -269,6 +272,7 @@ btnSkip.addEventListener("click", async () => {
       id: next.id,
       activeSeconds: next.activeSeconds,
       domain: next.domain,
+      startedAt: next.startedAt,
     });
   } else {
     await renderSummary();
@@ -368,6 +372,7 @@ btnMerge.addEventListener("click", async () => {
     id: longestSession.id,
     activeSeconds: totalSeconds,
     domain: longestSession.domain,
+    startedAt: longestSession.startedAt,
   });
 });
 
@@ -393,6 +398,7 @@ btnLogEach.addEventListener("click", async () => {
     id: first.id,
     activeSeconds: first.activeSeconds,
     domain: first.domain,
+    startedAt: first.startedAt,
   });
 });
 
@@ -423,11 +429,13 @@ async function init(): Promise<void> {
         id: s.id,
         activeSeconds: s.activeSeconds,
         domain: s.domain,
+        startedAt: s.startedAt,
       });
     } else {
       renderSessionList(unlogged);
     }
-  } catch {
+  } catch (e) {
+    console.error("[rippl] popup init failed", e);
     stateLoading.textContent = "Something went wrong. Try reopening the popup.";
   }
 }

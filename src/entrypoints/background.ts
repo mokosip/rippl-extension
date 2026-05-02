@@ -164,9 +164,7 @@ export default defineBackground(() => {
 
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === "rippl-open-popup") {
-      chrome.action.openPopup().catch(() => {
-        chrome.tabs.create({ url: chrome.runtime.getURL("/popup.html") });
-      });
+      chrome.action.openPopup().catch(() => {});
     }
   });
 
