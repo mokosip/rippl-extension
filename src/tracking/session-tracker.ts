@@ -17,6 +17,7 @@ interface ActiveSession {
 
 export class SessionTracker {
   private active: ActiveSession | null = null;
+  onSessionEnd: ((session: Session) => void) | null = null;
 
   getActiveSession(): ActiveSession | null {
     return this.active;
@@ -64,21 +65,6 @@ export class SessionTracker {
 
     console.log("[rippl] session saved", a.domain, `${activeSeconds}s`, a.id);
 
-    const mins = Math.round(activeSeconds / 60);
-    const duration = mins < 1 ? "<1 min" : `${mins} min`;
-    try {
-      await chrome.notifications.create(`rippl-${Date.now()}`, {
-        type: "basic",
-        iconUrl: chrome.runtime.getURL("icon/128.png"),
-        title: `Tracked ${duration} on ${a.domain}`,
-        message: "Click the rippl icon to log what you did.",
-        priority: 0,
-      });
-      console.log("[rippl] notification sent");
-    } catch (e) {
-      console.error("[rippl] notification failed", e);
-    }
-
     const session: Session = {
       id: a.id,
       domain: a.domain,
@@ -94,5 +80,6 @@ export class SessionTracker {
     };
 
     await db.sessions.put(session);
+    this.onSessionEnd?.(session);
   }
 }

@@ -97,6 +97,21 @@ const mockRuntime = {
   getURL: vi.fn((path: string) => `chrome-extension://fake-id/${path}`),
 };
 
+const mockNotifications = {
+  create: vi.fn((_id: string, _opts: unknown) => Promise.resolve()),
+  clear: vi.fn(() => Promise.resolve(true)),
+  onClicked: {
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    hasListener: vi.fn(() => false),
+  },
+};
+
+const mockPermissions = {
+  request: vi.fn(() => Promise.resolve(true)),
+  contains: vi.fn(() => Promise.resolve(false)),
+};
+
 (globalThis as Record<string, unknown>).chrome = {
   storage: mockStorage,
   alarms: mockAlarms,
@@ -104,6 +119,8 @@ const mockRuntime = {
   tabs: mockTabs,
   action: mockAction,
   runtime: mockRuntime,
+  notifications: mockNotifications,
+  permissions: mockPermissions,
 };
 
 export function clearMockStorage() {

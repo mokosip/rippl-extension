@@ -8,5 +8,6 @@ export default defineConfig({
     description: "Tracks time spent on AI tools and shows how AI shapes your day. All data stays local.",
     permissions: ["tabs", "storage", "idle", "alarms", "notifications"],
     host_permissions: [],
+    optional_host_permissions: ["<all_urls>"],
   },
 });

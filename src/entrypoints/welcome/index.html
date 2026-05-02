@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="./style.css">
-  <title>rippl — Welcome</title>
+  <title>rippl — Setup</title>
 </head>
 <body>
   <div id="app">
@@ -22,12 +22,44 @@
     <h1 class="headline">See how AI shapes your day.</h1>
 
     <p class="privacy">
-      We only see which AI tools you visit&nbsp;— never your conversations, prompts, or anything you type.
-      All data stays on your device.
+      We only see which AI tools you visit&nbsp;&mdash; never your conversations,
+      prompts, or anything you type. All data stays on your device.
     </p>
 
+    <hr class="divider">
+
+    <section class="domain-picker">
+      <h2 class="section-title">Which AI tools do you use?</h2>
+
+      <div id="domain-grid" class="domain-grid">
+        <!-- Populated by main.ts -->
+      </div>
+
+      <div class="custom-domain-row">
+        <label for="custom-input" class="custom-label">Add custom:</label>
+        <input
+          id="custom-input"
+          type="text"
+          class="custom-input"
+          placeholder="myai.company.com"
+          autocomplete="off"
+        >
+        <button id="add-custom-btn" class="btn-add" type="button">Add</button>
+      </div>
+    </section>
+
+    <hr class="divider">
+
+    <label class="toast-option">
+      <input id="toast-checkbox" type="checkbox">
+      <span class="toast-text">
+        Show in-page notifications when a session ends
+        <span class="toast-hint">(Small toast on AI tool pages &mdash; requires extra permission)</span>
+      </span>
+    </label>
+
     <button id="cta" class="cta-btn">
-      Got it — I'll check in after your next AI session.
+      Let's discover your AI time
     </button>
   </div>
   <script type="module" src="./main.ts"></script>

@@ -1,4 +1,4 @@
-import { matchAIDomain } from "@/domains/ai-domains";
+import { getEnabledDomains, matchURL } from "@/domains/ai-domains";
 import { SessionTracker } from "@/tracking/session-tracker";
 import { updateBadge } from "@/badge/badge-manager";
 import { db } from "@/db/index";
@@ -9,6 +9,43 @@ export default defineBackground(() => {
   const tracker = new SessionTracker();
   const HEARTBEAT_ALARM = "rippl-heartbeat";
   const IDLE_THRESHOLD = 300; // 5 min
+
+  // Handle session end: OS notification + optional toast
+  tracker.onSessionEnd = async (session) => {
+    const mins = Math.round(session.activeSeconds / 60);
+    const duration = mins < 1 ? "<1 min" : `${mins} min`;
+
+    // OS notification (always)
+    try {
+      await chrome.notifications.create(`rippl-${Date.now()}`, {
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icon/128.png"),
+        title: `Tracked ${duration} on ${session.domain}`,
+        message: "Click the rippl icon to log what you did.",
+        priority: 0,
+      });
+      console.log("[rippl] notification sent");
+    } catch (e) {
+      console.error("[rippl] notification failed", e);
+    }
+
+    // Toast (if enabled)
+    const toastConfig = await db.config.get("toastEnabled");
+    if (toastConfig?.value === true) {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab?.id) {
+          chrome.tabs.sendMessage(activeTab.id, {
+            type: "rippl-toast",
+            domain: session.domain,
+            duration,
+          }).catch(() => {});
+        }
+      } catch {
+        // tab might not have content script
+      }
+    }
+  };
 
   async function isPaused(): Promise<boolean> {
     const config = await db.config.get("trackingPaused");
@@ -25,8 +62,8 @@ export default defineBackground(() => {
 
     try {
       const tab = await chrome.tabs.get(tabId);
-      const customDomains = await db.customDomains.toArray();
-      const domain = tab.url ? matchAIDomain(tab.url, customDomains) : null;
+      const domains = await getEnabledDomains();
+      const domain = tab.url ? matchURL(tab.url, domains) : null;
       console.log("[rippl] tab →", tab.url?.slice(0, 60), domain ? `✓ ${domain}` : "✗ not AI");
       await tracker.onTabFocused(domain);
 
