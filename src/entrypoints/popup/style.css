@@ -232,6 +232,12 @@ body {
   flex-shrink: 0;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .btn-icon {
   background: none;
   border: none;

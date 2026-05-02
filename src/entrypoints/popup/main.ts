@@ -152,6 +152,13 @@ async function renderSummary(): Promise<void> {
   showState(stateB);
 }
 
+// Wire settings
+const btnSettings = document.getElementById("btn-settings")!;
+btnSettings.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("/welcome.html") });
+  window.close();
+});
+
 // Wire pause / resume
 btnPause.addEventListener("click", async () => {
   await setTrackingPaused(true);

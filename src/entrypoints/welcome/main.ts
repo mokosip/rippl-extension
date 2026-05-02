@@ -8,11 +8,7 @@ interface DomainItem {
   custom: boolean;
 }
 
-const domainItems: DomainItem[] = AI_DOMAINS.map((entry) => ({
-  entry,
-  enabled: true, // all pre-checked
-  custom: false,
-}));
+let domainItems: DomainItem[] = [];
 
 // --- DOM refs ---
 const grid = document.getElementById("domain-grid")!;
@@ -46,7 +42,44 @@ function renderGrid() {
   }
 }
 
-renderGrid();
+// --- Init: load saved settings or default all-checked ---
+async function init() {
+  const savedConfig = await db.config.get("enabledDomains");
+  const savedCustom = await db.customDomains.toArray();
+  const toastConfig = await db.config.get("toastEnabled");
+
+  if (savedConfig?.value) {
+    const enabled = savedConfig.value as DomainEntry[];
+    const enabledHostnames = new Set(enabled.map((d) => d.hostname));
+    domainItems = AI_DOMAINS.map((entry) => ({
+      entry,
+      enabled: enabledHostnames.has(entry.hostname),
+      custom: false,
+    }));
+  } else {
+    domainItems = AI_DOMAINS.map((entry) => ({
+      entry,
+      enabled: true,
+      custom: false,
+    }));
+  }
+
+  for (const cd of savedCustom) {
+    domainItems.push({
+      entry: { hostname: cd.hostname, label: cd.label },
+      enabled: true,
+      custom: true,
+    });
+  }
+
+  if (toastConfig?.value === true) {
+    toastCheckbox.checked = true;
+  }
+
+  renderGrid();
+}
+
+init();
 
 // --- Add custom domain ---
 function addCustomDomain() {

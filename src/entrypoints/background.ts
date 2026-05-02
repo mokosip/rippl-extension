@@ -29,20 +29,25 @@ export default defineBackground(() => {
       console.error("[rippl] notification failed", e);
     }
 
-    // Toast (if enabled)
+    // Toast (if enabled) — retry up to 3 times to find a valid tab
     const toastConfig = await db.config.get("toastEnabled");
     if (toastConfig?.value === true) {
-      try {
-        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (activeTab?.id) {
-          chrome.tabs.sendMessage(activeTab.id, {
-            type: "rippl-toast",
-            domain: session.domain,
-            duration,
-          }).catch(() => {});
+      const toastMsg = { type: "rippl-toast", domain: session.domain, duration };
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 500));
+        try {
+          const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          const url = activeTab?.url ?? "";
+          if (!activeTab?.id || url.startsWith("chrome://") || url.startsWith("about:") || url.startsWith("chrome-extension://")) {
+            console.log("[rippl] toast skip (non-injectable tab)", url.slice(0, 60));
+            continue;
+          }
+          await chrome.tabs.sendMessage(activeTab.id, toastMsg);
+          console.log("[rippl] toast sent to", url.slice(0, 60));
+          break;
+        } catch (e) {
+          console.log("[rippl] toast attempt", attempt + 1, "failed", (e as Error).message);
         }
-      } catch {
-        // tab might not have content script
       }
     }
   };

@@ -2,7 +2,9 @@ export default defineContentScript({
   matches: ["<all_urls>"],
   runAt: "document_idle",
   main() {
+    console.log("[rippl] toast content script loaded on", window.location.hostname);
     chrome.runtime.onMessage.addListener((msg) => {
+      console.log("[rippl] content script got message", msg);
       if (msg.type === "rippl-toast") {
         showToast(msg.domain, msg.duration);
       }
@@ -96,5 +98,5 @@ function showToast(domain: string, duration: string) {
     toast.addEventListener("animationend", () => {
       host.remove();
     });
-  }, 4000);
+  }, 7000);
 }
