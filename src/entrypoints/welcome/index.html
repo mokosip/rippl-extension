@@ -3,11 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="./style.css">
   <title>rippl — Welcome</title>
 </head>
 <body>
-  <div id="app"><p>Welcome placeholder</p></div>
+  <div id="app">
+    <div class="brand-mark">
+      <div class="brand-icon" aria-hidden="true">
+        <span class="ring ring-4"></span>
+        <span class="ring ring-3"></span>
+        <span class="ring ring-2"></span>
+        <span class="ring ring-1"></span>
+      </div>
+      <span class="brand-name">rippl</span>
+    </div>
+
+    <h1 class="headline">See how AI shapes your day.</h1>
+
+    <p class="privacy">
+      We only see which AI tools you visit&nbsp;— never your conversations, prompts, or anything you type.
+      All data stays on your device.
+    </p>
+
+    <button id="cta" class="cta-btn">
+      Got it — I'll check in after your next AI session.
+    </button>
+  </div>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

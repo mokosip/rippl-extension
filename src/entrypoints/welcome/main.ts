@@ -1,1 +1,5 @@
-console.log("welcome loaded");
+const btn = document.getElementById("cta") as HTMLButtonElement;
+
+btn?.addEventListener("click", () => {
+  window.close();
+});
