@@ -1,1 +1,228 @@
-/* placeholder */
+:root {
+  --moss: #5C7A52;
+  --moss-dark: #3F5639;
+  --moss-tint: #E5EBD5;
+  --terra: #B05F3F;
+  --terra-tint: #F2DFD2;
+  --paper: #EFEAE0;
+  --cream: #FBF8F1;
+  --ink: #1F1C16;
+  --ink-2: #56524A;
+  --ink-3: #8C8478;
+  --line: #D8CFB9;
+  --radius-card: 8px;
+  --radius-pill: 999px;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: "Source Serif 4", Georgia, serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 360px;
+  min-height: 100px;
+  background: var(--paper);
+  font-family: var(--font-sans);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+#app {
+  padding: 20px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Prompt headline */
+.prompt-headline {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+/* Section labels */
+.section-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+  margin-top: 16px;
+}
+
+.section-label:first-of-type {
+  margin-top: 0;
+}
+
+/* Pill buttons */
+.pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--moss-tint);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.pill:hover {
+  background: var(--moss);
+  color: #fff;
+}
+
+.pill.selected {
+  background: var(--moss);
+  color: #fff;
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.btn-skip {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 12px;
+}
+
+.btn-skip:hover {
+  color: var(--ink-2);
+}
+
+/* Primary button */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 18px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--moss);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn-primary:hover {
+  background: var(--moss-dark);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-primary:disabled:hover {
+  background: var(--moss);
+}
+
+/* Multi-session list */
+.list-headline {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.session-row:last-child {
+  border-bottom: none;
+}
+
+.session-row input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--moss);
+  cursor: pointer;
+}
+
+.session-label {
+  font-weight: 500;
+  color: var(--ink);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-duration {
+  color: var(--ink-2);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.session-time {
+  color: var(--ink-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.list-actions {
+  justify-content: center;
+}
+
+/* Summary placeholder */
+.summary-placeholder {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  color: var(--ink-3);
+  text-align: center;
+  padding: 32px 0;
+}
+
+/* Loading */
+.loading-text {
+  color: var(--ink-3);
+  text-align: center;
+  padding: 24px 0;
+}

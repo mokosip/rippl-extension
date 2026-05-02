@@ -7,7 +7,60 @@
   <title>rippl</title>
 </head>
 <body>
-  <div id="app"><p>Loading…</p></div>
+  <div id="app">
+
+    <!-- State A: Single session micro-prompt -->
+    <div id="state-a-prompt" class="state hidden">
+      <p class="prompt-headline" id="prompt-headline"></p>
+
+      <label class="section-label">What were you doing?</label>
+      <div class="pill-group" id="activity-pills">
+        <button class="pill" data-value="Writing">Writing</button>
+        <button class="pill" data-value="Code">Code</button>
+        <button class="pill" data-value="Research">Research</button>
+        <button class="pill" data-value="Creative">Creative</button>
+        <button class="pill" data-value="Other">Other</button>
+      </div>
+
+      <label class="section-label">How long without AI?</label>
+      <div class="pill-group" id="time-pills">
+        <button class="pill" data-value="same">~same</button>
+        <button class="pill" data-value="5">5m</button>
+        <button class="pill" data-value="15">15m</button>
+        <button class="pill" data-value="30">30m</button>
+        <button class="pill" data-value="60">1hr</button>
+        <button class="pill" data-value="120">2hr+</button>
+      </div>
+
+      <div class="actions">
+        <button class="btn-skip" id="btn-skip">Skip</button>
+      </div>
+    </div>
+
+    <!-- State A: Multi-session list -->
+    <div id="state-a-list" class="state hidden">
+      <p class="list-headline" id="list-headline"></p>
+      <div id="session-list" class="session-list"></div>
+      <div class="actions list-actions">
+        <button class="btn-primary" id="btn-merge" disabled>Merge selected</button>
+        <button class="btn-primary" id="btn-log-each">Log each</button>
+      </div>
+      <div class="actions">
+        <button class="btn-skip" id="btn-skip-all">Skip all</button>
+      </div>
+    </div>
+
+    <!-- State B: Summary placeholder (Task 13) -->
+    <div id="state-b" class="state hidden">
+      <p class="summary-placeholder">Summary coming soon</p>
+    </div>
+
+    <!-- Loading state -->
+    <div id="state-loading" class="state">
+      <p class="loading-text">Loading&hellip;</p>
+    </div>
+
+  </div>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>
