@@ -2,7 +2,6 @@ import { db, type Session } from "@/db/index";
 import { logSession, skipSession, skipAllUnlogged } from "@/db/queries";
 import { updateBadge } from "@/badge/badge-manager";
 import { isTrackingPaused, setTrackingPaused } from "@/privacy/privacy-controls";
-import { AI_DOMAINS } from "@/domains/ai-domains";
 import { computeDailySummary } from "@/summary/daily-summary";
 import { humanScaleComparison } from "@/summary/seeds";
 
@@ -51,8 +50,7 @@ let sessionQueue: Session[] = [];
 // Helpers
 // ---------------------------------------------------------------------------
 function domainLabel(domain: string): string {
-  const entry = AI_DOMAINS.find((d) => d.hostname === domain);
-  return entry ? entry.label : domain;
+  return domain;
 }
 
 function formatDuration(seconds: number): string {
@@ -402,25 +400,28 @@ btnSkipAll.addEventListener("click", async () => {
 // Init
 // ---------------------------------------------------------------------------
 async function init(): Promise<void> {
-  const now = Date.now();
-  const unlogged = await db.sessions
-    .filter((s) => !s.logged && s.badgeExpiry !== null && s.badgeExpiry! > now)
-    .toArray();
+  try {
+    const now = Date.now();
+    const unlogged = await db.sessions
+      .filter((s) => !s.logged && s.badgeExpiry !== null && s.badgeExpiry! > now)
+      .toArray();
 
-  // Sort by startedAt ascending
-  unlogged.sort((a, b) => a.startedAt - b.startedAt);
+    unlogged.sort((a, b) => a.startedAt - b.startedAt);
 
-  if (unlogged.length === 0) {
-    await renderSummary();
-  } else if (unlogged.length === 1) {
-    const s = unlogged[0];
-    showPrompt({
-      id: s.id,
-      activeSeconds: s.activeSeconds,
-      domain: s.domain,
-    });
-  } else {
-    renderSessionList(unlogged);
+    if (unlogged.length === 0) {
+      await renderSummary();
+    } else if (unlogged.length === 1) {
+      const s = unlogged[0];
+      showPrompt({
+        id: s.id,
+        activeSeconds: s.activeSeconds,
+        domain: s.domain,
+      });
+    } else {
+      renderSessionList(unlogged);
+    }
+  } catch {
+    stateLoading.textContent = "Something went wrong. Try reopening the popup.";
   }
 }
 

@@ -15,8 +15,7 @@ export async function getSessionsInRange(startDate: string, endDate: string): Pr
 export async function getUnloggedSessions(): Promise<Session[]> {
   const now = Date.now();
   return db.sessions
-    .where("logged").equals(0)
-    .filter(s => s.badgeExpiry !== null && s.badgeExpiry > now)
+    .filter(s => !s.logged && s.badgeExpiry !== null && s.badgeExpiry > now)
     .toArray();
 }
 
@@ -46,12 +45,6 @@ export async function skipAllUnlogged(): Promise<void> {
   await db.sessions.bulkUpdate(
     unlogged.map(s => ({ key: s.id, changes: { logged: true } }))
   );
-}
-
-export async function deleteAllData(): Promise<void> {
-  await db.sessions.clear();
-  await db.config.clear();
-  await db.customDomains.clear();
 }
 
 export async function pruneOldSessions(now: Date = new Date()): Promise<void> {

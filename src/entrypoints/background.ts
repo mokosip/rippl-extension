@@ -75,7 +75,6 @@ export default defineBackground(() => {
     if (details.reason === "install") {
       await chrome.tabs.create({ url: chrome.runtime.getURL("/welcome.html") });
     }
-    await pruneOldSessions();
   });
 
   pruneOldSessions();
