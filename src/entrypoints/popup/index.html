@@ -50,9 +50,26 @@
       </div>
     </div>
 
-    <!-- State B: Summary placeholder (Task 13) -->
+    <!-- State B: Daily summary -->
     <div id="state-b" class="state hidden">
-      <p class="summary-placeholder">Summary coming soon</p>
+      <div class="summary-header">
+        <span class="brand-mark">&reg; rippl</span>
+        <button class="btn-icon" id="btn-pause" title="Pause tracking">&#x23F8;</button>
+      </div>
+      <p class="summary-date" id="summary-date"></p>
+      <div class="hero" id="hero"></div>
+      <div class="seed" id="seed"></div>
+      <hr class="divider">
+      <div class="stats" id="stats"></div>
+      <!-- Paused state -->
+      <div class="paused-state hidden" id="paused-state">
+        <p>Tracking paused.</p>
+        <button class="btn-primary" id="btn-resume">Resume</button>
+      </div>
+      <!-- Empty state -->
+      <div class="empty-state hidden" id="empty-state">
+        <p>Quiet day. No AI tools detected yet.</p>
+      </div>
     </div>
 
     <!-- Loading state -->

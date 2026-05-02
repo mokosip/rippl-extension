@@ -1,8 +1,10 @@
 import { db, type Session } from "@/db/index";
 import { logSession, skipSession, skipAllUnlogged } from "@/db/queries";
 import { updateBadge } from "@/badge/badge-manager";
-import { isTrackingPaused } from "@/privacy/privacy-controls";
+import { isTrackingPaused, setTrackingPaused } from "@/privacy/privacy-controls";
 import { AI_DOMAINS } from "@/domains/ai-domains";
+import { computeDailySummary } from "@/summary/daily-summary";
+import { humanScaleComparison } from "@/summary/seeds";
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -22,6 +24,16 @@ const sessionListEl = document.getElementById("session-list")!;
 const btnMerge = document.getElementById("btn-merge") as HTMLButtonElement;
 const btnLogEach = document.getElementById("btn-log-each")!;
 const btnSkipAll = document.getElementById("btn-skip-all")!;
+
+// State B refs
+const summaryDate = document.getElementById("summary-date")!;
+const heroEl = document.getElementById("hero")!;
+const seedEl = document.getElementById("seed")!;
+const statsEl = document.getElementById("stats")!;
+const pausedStateEl = document.getElementById("paused-state")!;
+const emptyStateEl = document.getElementById("empty-state")!;
+const btnPause = document.getElementById("btn-pause")!;
+const btnResume = document.getElementById("btn-resume")!;
 
 // ---------------------------------------------------------------------------
 // State
@@ -69,6 +81,91 @@ async function refreshBadge(): Promise<void> {
   const paused = await isTrackingPaused();
   await updateBadge(paused);
 }
+
+function formatMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (mins === 0) return `${hrs}hr`;
+  return `${hrs}hr ${mins}min`;
+}
+
+// ---------------------------------------------------------------------------
+// State B — Daily summary rendering
+// ---------------------------------------------------------------------------
+async function renderSummary(): Promise<void> {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const summary = await computeDailySummary(todayStr);
+  const paused = await isTrackingPaused();
+
+  // Reset visibility of sub-sections
+  heroEl.classList.remove("hidden");
+  seedEl.classList.remove("hidden");
+  statsEl.classList.remove("hidden");
+  pausedStateEl.classList.add("hidden");
+  emptyStateEl.classList.add("hidden");
+  document.querySelector(".divider")?.classList.remove("hidden");
+
+  // Date line
+  const today = new Date();
+  const isToday =
+    todayStr === today.toISOString().slice(0, 10);
+  summaryDate.textContent = isToday ? "Today" : todayStr;
+
+  if (paused) {
+    heroEl.classList.add("hidden");
+    seedEl.classList.add("hidden");
+    statsEl.classList.add("hidden");
+    document.querySelector(".divider")?.classList.add("hidden");
+    pausedStateEl.classList.remove("hidden");
+    showState(stateB);
+    return;
+  }
+
+  if (summary.sessionCount === 0) {
+    heroEl.classList.add("hidden");
+    seedEl.classList.add("hidden");
+    statsEl.classList.add("hidden");
+    document.querySelector(".divider")?.classList.add("hidden");
+    emptyStateEl.classList.remove("hidden");
+    showState(stateB);
+    return;
+  }
+
+  // Determine hero based on logged ratio
+  const loggedRatio =
+    summary.sessionCount > 0
+      ? summary.loggedCount / summary.sessionCount
+      : 0;
+
+  if (loggedRatio >= 0.5) {
+    // Hero = time saved + human-scale seed
+    heroEl.textContent = `${formatMinutes(summary.timeSavedMinutes)} saved`;
+    seedEl.textContent = `“${humanScaleComparison(summary.timeSavedMinutes)}”`;
+  } else {
+    // Hero = total AI time, no seed
+    heroEl.textContent = `${formatMinutes(summary.totalActiveMinutes)} on AI tools`;
+    seedEl.classList.add("hidden");
+  }
+
+  // Stats below divider
+  statsEl.innerHTML = `${formatMinutes(summary.totalActiveMinutes)} on AI tools<br>${summary.sessionCount} session${summary.sessionCount !== 1 ? "s" : ""} (${summary.loggedCount} logged)`;
+
+  showState(stateB);
+}
+
+// Wire pause / resume
+btnPause.addEventListener("click", async () => {
+  await setTrackingPaused(true);
+  await refreshBadge();
+  await renderSummary();
+});
+
+btnResume.addEventListener("click", async () => {
+  await setTrackingPaused(false);
+  await refreshBadge();
+  await renderSummary();
+});
 
 // ---------------------------------------------------------------------------
 // Micro-prompt logic
@@ -125,7 +222,7 @@ async function tryLog(): Promise<void> {
       domain: next.domain,
     });
   } else {
-    showState(stateB);
+    await renderSummary();
   }
 }
 
@@ -169,7 +266,7 @@ btnSkip.addEventListener("click", async () => {
       domain: next.domain,
     });
   } else {
-    showState(stateB);
+    await renderSummary();
   }
 });
 
@@ -277,7 +374,7 @@ btnLogEach.addEventListener("click", async () => {
     .toArray();
 
   if (unlogged.length === 0) {
-    showState(stateB);
+    await renderSummary();
     return;
   }
 
@@ -298,7 +395,7 @@ btnLogEach.addEventListener("click", async () => {
 btnSkipAll.addEventListener("click", async () => {
   await skipAllUnlogged();
   await refreshBadge();
-  showState(stateB);
+  await renderSummary();
 });
 
 // ---------------------------------------------------------------------------
@@ -314,7 +411,7 @@ async function init(): Promise<void> {
   unlogged.sort((a, b) => a.startedAt - b.startedAt);
 
   if (unlogged.length === 0) {
-    showState(stateB);
+    await renderSummary();
   } else if (unlogged.length === 1) {
     const s = unlogged[0];
     showPrompt({
