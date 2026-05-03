@@ -1,17 +1,18 @@
 import { db, type Session } from "@/db/index";
-import { logSession, skipSession, skipAllUnlogged } from "@/db/queries";
+import { logSession, skipSession, skipAllUnlogged, getSessionsInRange } from "@/db/queries";
 import { updateBadge } from "@/badge/badge-manager";
 import { isTrackingPaused, setTrackingPaused } from "@/privacy/privacy-controls";
 import { computeDailySummary } from "@/summary/daily-summary";
 import { humanScaleComparison } from "@/summary/seeds";
+import { computeWeeklySummary } from "@/summary/weekly-summary";
 
 // ---------------------------------------------------------------------------
 // DOM refs
 // ---------------------------------------------------------------------------
 const stateLoading = document.getElementById("state-loading")!;
-const stateAPrompt = document.getElementById("state-a-prompt")!;
-const stateAList = document.getElementById("state-a-list")!;
-const stateB = document.getElementById("state-b")!;
+const statePrompt = document.getElementById("state-prompt")!;
+const stateSessionList = document.getElementById("state-session-list")!;
+const stateSummary = document.getElementById("state-summary")!;
 
 const promptHeadline = document.getElementById("prompt-headline")!;
 const activityPills = document.getElementById("activity-pills")!;
@@ -24,7 +25,11 @@ const btnMerge = document.getElementById("btn-merge") as HTMLButtonElement;
 const btnLogEach = document.getElementById("btn-log-each")!;
 const btnSkipAll = document.getElementById("btn-skip-all")!;
 
-// State B refs
+// History + teaser refs
+const btnHistory = document.getElementById("btn-history")!;
+const weeklyTeaser = document.getElementById("weekly-teaser")!;
+
+// Summary refs
 const summaryDate = document.getElementById("summary-date")!;
 const heroEl = document.getElementById("hero")!;
 const seedEl = document.getElementById("seed")!;
@@ -69,9 +74,9 @@ function formatTime(timestamp: number): string {
 
 function showState(el: HTMLElement): void {
   stateLoading.classList.add("hidden");
-  stateAPrompt.classList.add("hidden");
-  stateAList.classList.add("hidden");
-  stateB.classList.add("hidden");
+  statePrompt.classList.add("hidden");
+  stateSessionList.classList.add("hidden");
+  stateSummary.classList.add("hidden");
   el.classList.remove("hidden");
 }
 
@@ -89,7 +94,7 @@ function formatMinutes(minutes: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// State B — Daily summary rendering
+// Daily summary rendering
 // ---------------------------------------------------------------------------
 async function renderSummary(): Promise<void> {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -116,7 +121,7 @@ async function renderSummary(): Promise<void> {
     statsEl.classList.add("hidden");
     document.querySelector(".divider")?.classList.add("hidden");
     pausedStateEl.classList.remove("hidden");
-    showState(stateB);
+    showState(stateSummary);
     return;
   }
 
@@ -126,7 +131,7 @@ async function renderSummary(): Promise<void> {
     statsEl.classList.add("hidden");
     document.querySelector(".divider")?.classList.add("hidden");
     emptyStateEl.classList.remove("hidden");
-    showState(stateB);
+    showState(stateSummary);
     return;
   }
 
@@ -149,13 +154,41 @@ async function renderSummary(): Promise<void> {
   // Stats below divider
   statsEl.innerHTML = `${formatMinutes(summary.totalActiveMinutes)} on AI tools<br>${summary.sessionCount} session${summary.sessionCount !== 1 ? "s" : ""} (${summary.loggedCount} logged)`;
 
-  showState(stateB);
+  // Weekly teaser
+  const now2 = new Date();
+  const weekEnd = now2.toISOString().slice(0, 10);
+  const weekStart = new Date(now2);
+  weekStart.setDate(weekStart.getDate() - 6);
+  const weekStartStr = weekStart.toISOString().slice(0, 10);
+  const weekSessions = await getSessionsInRange(weekStartStr, weekEnd);
+  const weekSummary = computeWeeklySummary(weekSessions, weekStartStr, weekEnd);
+
+  if (weekSummary.totalSessions > 0) {
+    weeklyTeaser.classList.remove("hidden");
+    if (weekSummary.totalTimeSavedMinutes > 0) {
+      weeklyTeaser.textContent = `This week: ${formatMinutes(weekSummary.totalTimeSavedMinutes)} saved →`;
+    } else {
+      weeklyTeaser.textContent = `This week: ${formatMinutes(weekSummary.totalActiveMinutes)} on AI tools →`;
+    }
+  }
+
+  showState(stateSummary);
 }
 
 // Wire settings
 const btnSettings = document.getElementById("btn-settings")!;
 btnSettings.addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("/welcome.html") });
+  window.close();
+});
+
+btnHistory.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("/history.html") });
+  window.close();
+});
+
+weeklyTeaser.addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("/history.html") });
   window.close();
 });
 
@@ -206,7 +239,7 @@ function showPrompt(session: {
     samePill.dataset.resolved = String(mins);
   }
 
-  showState(stateAPrompt);
+  showState(statePrompt);
 }
 
 async function tryLog(): Promise<void> {
@@ -314,7 +347,7 @@ function renderSessionList(sessions: Session[]): void {
     sessionListEl.appendChild(row);
   });
 
-  showState(stateAList);
+  showState(stateSessionList);
 }
 
 function updateMergeButton(): void {

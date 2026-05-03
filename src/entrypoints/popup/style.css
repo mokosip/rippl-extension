@@ -211,7 +211,7 @@ body {
   justify-content: center;
 }
 
-/* State B: Daily summary */
+/* Daily summary */
 .summary-header {
   display: flex;
   justify-content: space-between;
@@ -254,10 +254,16 @@ body {
   color: var(--ink-2);
 }
 
+.summary-date-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
 .summary-date {
   font-size: 13px;
   color: var(--ink-3);
-  margin-bottom: 16px;
 }
 
 .hero {
@@ -319,4 +325,20 @@ body {
   color: var(--ink-3);
   text-align: center;
   padding: 24px 0;
+}
+
+/* Weekly teaser */
+.weekly-teaser {
+  text-align: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--moss);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.weekly-teaser:hover {
+  color: var(--moss-dark);
 }
