@@ -1,6 +1,6 @@
 import type { Session } from "../db/index";
 
-export const DASHBOARD_LIVE = false;
+export const DASHBOARD_LIVE = true;
 export const DASHBOARD_URL = "https://ripplup.app";
 
 export interface WeeklySummary {
@@ -86,10 +86,9 @@ export function computeWeeklySummary(
     if (loggedWithActivity.length > 0) {
       const activityCounts = new Map<string, number>();
       for (const s of loggedWithActivity) {
-        activityCounts.set(
-          s.activityType!,
-          (activityCounts.get(s.activityType!) ?? 0) + 1,
-        );
+        for (const a of s.activityType!) {
+          activityCounts.set(a, (activityCounts.get(a) ?? 0) + 1);
+        }
       }
       let maxActivity = "";
       let maxCount = 0;

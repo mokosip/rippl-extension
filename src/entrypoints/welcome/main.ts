@@ -1,6 +1,6 @@
 import { AI_DOMAINS, type DomainEntry } from "@/domains/ai-domains";
 import { db } from "@/db/index";
-import { getAuthToken, setAuthToken, clearAuthToken, syncSessions } from "@/sync/dashboard-sync";
+import { getAuthToken, setAuthToken, clearAuthToken, validateToken, syncSessions } from "@/sync/dashboard-sync";
 
 // --- State ---
 interface DomainItem {
@@ -10,6 +10,10 @@ interface DomainItem {
 }
 
 let domainItems: DomainItem[] = [];
+
+const uniqueDomains = AI_DOMAINS.filter(
+  (d, i, arr) => arr.findIndex((x) => x.label === d.label) === i
+);
 
 // --- DOM refs ---
 const grid = document.getElementById("domain-grid")!;
@@ -54,14 +58,14 @@ async function init() {
 
   if (savedConfig?.value) {
     const enabled = savedConfig.value as DomainEntry[];
-    const enabledHostnames = new Set(enabled.map((d) => d.hostname));
-    domainItems = AI_DOMAINS.map((entry) => ({
+    const enabledLabels = new Set(enabled.map((d) => d.label));
+    domainItems = uniqueDomains.map((entry) => ({
       entry,
-      enabled: enabledHostnames.has(entry.hostname),
+      enabled: enabledLabels.has(entry.label),
       custom: false,
     }));
   } else {
-    domainItems = AI_DOMAINS.map((entry) => ({
+    domainItems = uniqueDomains.map((entry) => ({
       entry,
       enabled: true,
       custom: false,
@@ -166,19 +170,21 @@ async function handleConnect() {
   connectBtn.disabled = true;
 
   try {
+    const valid = await validateToken(token);
+    if (!valid) {
+      dashboardStatus.textContent = "Invalid token — check and try again";
+      dashboardStatus.className = "dashboard-status error";
+      connectBtn.disabled = false;
+      connectBtn.textContent = "Connect";
+      return;
+    }
+
     await setAuthToken(token);
     await syncSessions();
-
-    const storedToken = await getAuthToken();
-    if (storedToken) {
-      dashboardStatus.textContent = "Connected — syncing sessions";
-      dashboardStatus.className = "dashboard-status success";
-    } else {
-      dashboardStatus.textContent = "Token rejected by dashboard";
-      dashboardStatus.className = "dashboard-status error";
-    }
+    dashboardStatus.textContent = "Connected — syncing sessions";
+    dashboardStatus.className = "dashboard-status success";
   } catch {
-    dashboardStatus.textContent = "Connection failed";
+    dashboardStatus.textContent = "Connection failed — check your network";
     dashboardStatus.className = "dashboard-status error";
   }
 
@@ -191,10 +197,11 @@ updateDashboardStatus();
 
 // --- CTA ---
 ctaBtn.addEventListener("click", async () => {
-  // 1. Collect enabled built-in domains
-  const enabledBuiltIn: DomainEntry[] = domainItems
-    .filter((d) => d.enabled && !d.custom)
-    .map((d) => d.entry);
+  // 1. Collect enabled built-in domains (expand labels back to all hostnames)
+  const enabledLabels = new Set(
+    domainItems.filter((d) => d.enabled && !d.custom).map((d) => d.entry.label)
+  );
+  const enabledBuiltIn = AI_DOMAINS.filter((d) => enabledLabels.has(d.label));
 
   // 2. Collect custom domains
   const customDomains = domainItems.filter((d) => d.enabled && d.custom);

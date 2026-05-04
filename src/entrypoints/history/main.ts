@@ -153,7 +153,7 @@ async function render(): Promise<void> {
       bridgeCta.href = DASHBOARD_URL;
       bridgeCta.classList.remove("hidden");
     } else {
-      bridgeText.textContent = `You freed ${formatMinutes(summary.totalTimeSavedMinutes)} this week. Dashboard coming soon — we'll help you turn freed time into something real.`;
+      bridgeText.textContent = `You freed ${formatMinutes(summary.totalTimeSavedMinutes)} this week.`;
     }
   }
 
@@ -224,7 +224,7 @@ async function render(): Promise<void> {
         activityEl.textContent = "Not logged";
       } else {
         activityEl.className = "session-activity";
-        activityEl.textContent = s.activityType;
+        activityEl.textContent = s.activityType?.join(", ") ?? null;
       }
 
       const timeEl = document.createElement("span");

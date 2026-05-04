@@ -11,6 +11,10 @@
 
     <!-- Single session micro-prompt -->
     <div id="state-prompt" class="state hidden">
+      <div class="prompt-topbar">
+        <button class="btn-back" id="btn-back" type="button">&larr; Back</button>
+        <span class="prompt-counter hidden" id="prompt-counter"></span>
+      </div>
       <p class="prompt-headline" id="prompt-headline"></p>
 
       <label class="section-label">What were you doing?</label>
@@ -39,7 +43,10 @@
 
     <!-- Multi-session list -->
     <div id="state-session-list" class="state hidden">
-      <p class="list-headline" id="list-headline"></p>
+      <div class="list-header">
+        <p class="list-headline" id="list-headline"></p>
+        <button class="btn-sort" id="btn-sort" type="button">Newest first</button>
+      </div>
       <div id="session-list" class="session-list"></div>
       <div class="actions list-actions">
         <button class="btn-primary" id="btn-merge" disabled>Merge selected</button>

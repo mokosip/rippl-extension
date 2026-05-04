@@ -16,6 +16,8 @@ const stateSessionList = document.getElementById("state-session-list")!;
 const stateSummary = document.getElementById("state-summary")!;
 
 const promptHeadline = document.getElementById("prompt-headline")!;
+const btnBack = document.getElementById("btn-back")!;
+const promptCounter = document.getElementById("prompt-counter")!;
 const activityPills = document.getElementById("activity-pills")!;
 const timePills = document.getElementById("time-pills")!;
 const btnSkip = document.getElementById("btn-skip")!;
@@ -25,6 +27,7 @@ const sessionListEl = document.getElementById("session-list")!;
 const btnMerge = document.getElementById("btn-merge") as HTMLButtonElement;
 const btnLogEach = document.getElementById("btn-log-each")!;
 const btnSkipAll = document.getElementById("btn-skip-all")!;
+const btnSort = document.getElementById("btn-sort")!;
 
 // History + teaser refs
 const btnHistory = document.getElementById("btn-history")!;
@@ -43,7 +46,7 @@ const btnResume = document.getElementById("btn-resume")!;
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-let selectedActivity: string | null = null;
+let selectedActivities: Set<string> = new Set();
 let selectedTime: string | null = null;
 let currentSession: {
   id: string;
@@ -51,6 +54,10 @@ let currentSession: {
   domain: string;
 } | null = null;
 let sessionQueue: Session[] = [];
+let newestFirst = false;
+let currentListSessions: Session[] = [];
+let promptIndex = 0;
+let promptTotal = 0;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -216,7 +223,7 @@ function showPrompt(session: {
   startedAt: number;
 }): void {
   currentSession = session;
-  selectedActivity = null;
+  selectedActivities = new Set();
   selectedTime = null;
 
   const mins = Math.round(session.activeSeconds / 60);
@@ -240,23 +247,30 @@ function showPrompt(session: {
     samePill.dataset.resolved = String(mins);
   }
 
+  if (promptTotal > 1) {
+    promptCounter.textContent = `${promptIndex} of ${promptTotal}`;
+    promptCounter.classList.remove("hidden");
+  } else {
+    promptCounter.classList.add("hidden");
+  }
+
   showState(statePrompt);
 }
 
 async function tryLog(): Promise<void> {
-  if (!selectedActivity || !selectedTime || !currentSession) return;
+  if (selectedActivities.size === 0 || !selectedTime || !currentSession) return;
 
   const estimatedWithoutMinutes =
     selectedTime === "same"
       ? Math.round(currentSession.activeSeconds / 60)
       : parseInt(selectedTime, 10);
 
-  await logSession(currentSession.id, selectedActivity, estimatedWithoutMinutes);
+  await logSession(currentSession.id, [...selectedActivities], estimatedWithoutMinutes);
   await refreshBadge();
   syncSessions();
 
-  // If there are more sessions queued, show the next one
   if (sessionQueue.length > 0) {
+    promptIndex++;
     const next = sessionQueue.shift()!;
     showPrompt({
       id: next.id,
@@ -275,11 +289,14 @@ async function tryLog(): Promise<void> {
 activityPills.addEventListener("click", (e) => {
   const pill = (e.target as HTMLElement).closest(".pill") as HTMLElement | null;
   if (!pill) return;
-  activityPills
-    .querySelectorAll(".pill")
-    .forEach((p) => p.classList.remove("selected"));
-  pill.classList.add("selected");
-  selectedActivity = pill.dataset.value ?? null;
+  const value = pill.dataset.value ?? "";
+  if (selectedActivities.has(value)) {
+    selectedActivities.delete(value);
+    pill.classList.remove("selected");
+  } else {
+    selectedActivities.add(value);
+    pill.classList.add("selected");
+  }
   tryLog();
 });
 
@@ -303,6 +320,7 @@ btnSkip.addEventListener("click", async () => {
   syncSessions();
 
   if (sessionQueue.length > 0) {
+    promptIndex++;
     const next = sessionQueue.shift()!;
     showPrompt({
       id: next.id,
@@ -315,14 +333,35 @@ btnSkip.addEventListener("click", async () => {
   }
 });
 
+// Back button
+btnBack.addEventListener("click", async () => {
+  const now = Date.now();
+  const unlogged = await db.sessions
+    .filter((s) => !s.logged && s.badgeExpiry !== null && s.badgeExpiry! > now)
+    .toArray();
+  if (unlogged.length > 1) {
+    unlogged.sort((a, b) => a.startedAt - b.startedAt);
+    renderSessionList(unlogged);
+  } else {
+    await renderSummary();
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Multi-session list logic
 // ---------------------------------------------------------------------------
 function renderSessionList(sessions: Session[]): void {
+  currentListSessions = sessions;
   listHeadline.textContent = `${sessions.length} sessions to log`;
+  btnSort.textContent = newestFirst ? "Oldest first" : "Newest first";
+
+  const sorted = [...sessions].sort((a, b) =>
+    newestFirst ? b.startedAt - a.startedAt : a.startedAt - b.startedAt
+  );
+
   sessionListEl.innerHTML = "";
 
-  sessions.forEach((session) => {
+  sorted.forEach((session) => {
     const row = document.createElement("div");
     row.className = "session-row";
 
@@ -352,6 +391,11 @@ function renderSessionList(sessions: Session[]): void {
 
   showState(stateSessionList);
 }
+
+btnSort.addEventListener("click", () => {
+  newestFirst = !newestFirst;
+  renderSessionList(currentListSessions);
+});
 
 function updateMergeButton(): void {
   const checked = sessionListEl.querySelectorAll(
@@ -403,6 +447,8 @@ btnMerge.addEventListener("click", async () => {
 
   // Queue unselected sessions for later
   sessionQueue = unselectedSessions;
+  promptTotal = 1 + unselectedSessions.length;
+  promptIndex = 1;
 
   showPrompt({
     id: longestSession.id,
@@ -427,6 +473,8 @@ btnLogEach.addEventListener("click", async () => {
   // Sort by startedAt ascending
   unlogged.sort((a, b) => a.startedAt - b.startedAt);
 
+  promptTotal = unlogged.length;
+  promptIndex = 1;
   const first = unlogged.shift()!;
   sessionQueue = unlogged;
 
@@ -461,6 +509,8 @@ async function init(): Promise<void> {
     if (unlogged.length === 0) {
       await renderSummary();
     } else if (unlogged.length === 1) {
+      promptTotal = 1;
+      promptIndex = 1;
       const s = unlogged[0];
       showPrompt({
         id: s.id,

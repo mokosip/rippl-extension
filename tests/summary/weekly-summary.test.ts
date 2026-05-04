@@ -59,9 +59,9 @@ describe("computeWeeklySummary", () => {
 
   it("computes topActivity when >=50% sessions logged", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: "Code" }),
-      baseSession({ id: "s2", date: "2024-01-01", logged: true, activityType: "Code" }),
-      baseSession({ id: "s3", date: "2024-01-01", logged: true, activityType: "Writing" }),
+      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Code"] }),
+      baseSession({ id: "s2", date: "2024-01-01", logged: true, activityType: ["Code"] }),
+      baseSession({ id: "s3", date: "2024-01-01", logged: true, activityType: ["Writing"] }),
       baseSession({ id: "s4", date: "2024-01-01", logged: false }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
@@ -71,7 +71,7 @@ describe("computeWeeklySummary", () => {
 
   it("returns null topActivity when <50% sessions logged", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: "Code" }),
+      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Code"] }),
       baseSession({ id: "s2", date: "2024-01-01", logged: false }),
       baseSession({ id: "s3", date: "2024-01-01", logged: false }),
     ];
@@ -129,7 +129,7 @@ describe("computeWeeklySummary", () => {
 
   it("handles single session with 100% for tool and activity", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", domain: "Perplexity", logged: true, activityType: "Research" }),
+      baseSession({ id: "s1", date: "2024-01-01", domain: "Perplexity", logged: true, activityType: ["Research"] }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
 

@@ -40,6 +40,32 @@ body {
   display: none !important;
 }
 
+.prompt-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.btn-back {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.btn-back:hover {
+  color: var(--ink-2);
+}
+
+.prompt-counter {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
 /* Prompt headline */
 .prompt-headline {
   font-family: var(--font-serif);
@@ -152,12 +178,32 @@ body {
 }
 
 /* Multi-session list */
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
 .list-headline {
   font-family: var(--font-serif);
   font-size: 16px;
   font-weight: 600;
   color: var(--ink);
-  margin-bottom: 12px;
+}
+
+.btn-sort {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.btn-sort:hover {
+  color: var(--ink-2);
 }
 
 .session-list {

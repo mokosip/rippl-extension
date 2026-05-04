@@ -21,7 +21,7 @@ export async function getUnloggedSessions(): Promise<Session[]> {
 
 export async function logSession(
   id: string,
-  activityType: string,
+  activityType: string[],
   estimatedWithoutMinutes: number
 ): Promise<void> {
   const session = await db.sessions.get(id);

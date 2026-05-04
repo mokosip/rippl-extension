@@ -7,7 +7,7 @@ export interface Session {
   endedAt: number;
   activeSeconds: number;
   date: string; // "YYYY-MM-DD"
-  activityType: string | null;
+  activityType: string[] | null;
   estimatedWithoutMinutes: number | null;
   timeSavedMinutes: number | null;
   logged: boolean;

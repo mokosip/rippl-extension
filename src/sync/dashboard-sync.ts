@@ -9,6 +9,22 @@ export async function getAuthToken(): Promise<string | null> {
   return (config?.value as string) ?? null;
 }
 
+export async function validateToken(token: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${DASHBOARD_URL}/api/sync/sessions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ sessions: [] }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function setAuthToken(token: string): Promise<void> {
   await db.config.put({ key: "dashboardToken", value: token });
   await db.sessions.where("syncStatus").equals("local").modify({ syncStatus: "pending" });
