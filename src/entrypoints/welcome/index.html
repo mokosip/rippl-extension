@@ -50,6 +50,26 @@
 
     <hr class="divider">
 
+    <section class="activity-picker">
+      <h2 class="section-title">Activity types</h2>
+      <div id="activity-grid" class="domain-grid">
+        <!-- Populated by main.ts -->
+      </div>
+      <div class="custom-domain-row">
+        <label for="activity-input" class="custom-label">Add custom:</label>
+        <input
+          id="activity-input"
+          type="text"
+          class="custom-input"
+          placeholder="e.g. Data analysis"
+          autocomplete="off"
+        >
+        <button id="add-activity-btn" class="btn-add" type="button">Add</button>
+      </div>
+    </section>
+
+    <hr class="divider">
+
     <label class="toast-option">
       <input id="toast-checkbox" type="checkbox">
       <span class="toast-text">

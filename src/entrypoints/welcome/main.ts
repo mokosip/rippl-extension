@@ -15,10 +15,16 @@ const uniqueDomains = AI_DOMAINS.filter(
   (d, i, arr) => arr.findIndex((x) => x.label === d.label) === i
 );
 
+const DEFAULT_ACTIVITIES = ["Writing", "Code", "Research", "Creative", "Other"];
+let customActivities: string[] = [];
+
 // --- DOM refs ---
 const grid = document.getElementById("domain-grid")!;
 const customInput = document.getElementById("custom-input") as HTMLInputElement;
 const addCustomBtn = document.getElementById("add-custom-btn")!;
+const activityGrid = document.getElementById("activity-grid")!;
+const activityInput = document.getElementById("activity-input") as HTMLInputElement;
+const addActivityBtn = document.getElementById("add-activity-btn")!;
 const toastCheckbox = document.getElementById("toast-checkbox") as HTMLInputElement;
 const ctaBtn = document.getElementById("cta")!;
 const tokenInput = document.getElementById("token-input") as HTMLInputElement;
@@ -80,11 +86,15 @@ async function init() {
     });
   }
 
+  const savedActivities = await db.config.get("customActivities");
+  customActivities = (savedActivities?.value as string[]) ?? [];
+
   if (toastConfig?.value === true) {
     toastCheckbox.checked = true;
   }
 
   renderGrid();
+  renderActivities();
 }
 
 init();
@@ -128,6 +138,56 @@ customInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     addCustomDomain();
+  }
+});
+
+// --- Activity types ---
+function renderActivities() {
+  activityGrid.innerHTML = "";
+  for (const activity of [...DEFAULT_ACTIVITIES, ...customActivities]) {
+    const label = document.createElement("label");
+    label.className = "domain-item";
+
+    const span = document.createElement("span");
+    span.className = "domain-label";
+    span.textContent = activity;
+
+    label.appendChild(span);
+
+    if (!DEFAULT_ACTIVITIES.includes(activity)) {
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn-remove";
+      removeBtn.textContent = "×";
+      removeBtn.type = "button";
+      removeBtn.addEventListener("click", () => {
+        customActivities = customActivities.filter((a) => a !== activity);
+        renderActivities();
+      });
+      label.appendChild(removeBtn);
+    }
+
+    activityGrid.appendChild(label);
+  }
+}
+
+function addCustomActivity() {
+  const raw = activityInput.value.trim();
+  if (!raw) return;
+  const all = [...DEFAULT_ACTIVITIES, ...customActivities];
+  if (all.some((a) => a.toLowerCase() === raw.toLowerCase())) {
+    activityInput.value = "";
+    return;
+  }
+  customActivities.push(raw);
+  activityInput.value = "";
+  renderActivities();
+}
+
+addActivityBtn.addEventListener("click", addCustomActivity);
+activityInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addCustomActivity();
   }
 });
 
@@ -221,7 +281,10 @@ ctaBtn.addEventListener("click", async () => {
     });
   }
 
-  // 5. Handle toast opt-in/out
+  // 5. Save custom activities
+  await db.config.put({ key: "customActivities", value: customActivities });
+
+  // Handle toast opt-in/out
   if (toastCheckbox.checked) {
     try {
       const granted = await chrome.permissions.request({

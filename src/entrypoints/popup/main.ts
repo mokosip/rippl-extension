@@ -7,6 +7,8 @@ import { humanScaleComparison } from "@/summary/seeds";
 import { computeWeeklySummary } from "@/summary/weekly-summary";
 import { syncSessions } from "@/sync/dashboard-sync";
 
+const DEFAULT_ACTIVITIES = ["Writing", "Code", "Research", "Creative", "Other"];
+
 // ---------------------------------------------------------------------------
 // DOM refs
 // ---------------------------------------------------------------------------
@@ -214,6 +216,28 @@ btnResume.addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Activity pills
+// ---------------------------------------------------------------------------
+let allActivities: string[] = [...DEFAULT_ACTIVITIES];
+
+async function loadActivities(): Promise<void> {
+  const config = await db.config.get("customActivities");
+  const custom = (config?.value as string[]) ?? [];
+  allActivities = [...DEFAULT_ACTIVITIES, ...custom];
+}
+
+function renderActivityPills(): void {
+  activityPills.innerHTML = "";
+  for (const activity of allActivities) {
+    const btn = document.createElement("button");
+    btn.className = "pill";
+    btn.dataset.value = activity;
+    btn.textContent = activity;
+    activityPills.appendChild(btn);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Micro-prompt logic
 // ---------------------------------------------------------------------------
 function showPrompt(session: {
@@ -231,10 +255,7 @@ function showPrompt(session: {
   const time = formatTime(session.startedAt);
   promptHeadline.textContent = `${formatDuration(session.activeSeconds)} on ${label} at ${time}`;
 
-  // Reset pill selections
-  activityPills
-    .querySelectorAll(".pill")
-    .forEach((p) => p.classList.remove("selected"));
+  renderActivityPills();
   timePills
     .querySelectorAll(".pill")
     .forEach((p) => p.classList.remove("selected"));
@@ -499,6 +520,7 @@ btnSkipAll.addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 async function init(): Promise<void> {
   try {
+    await loadActivities();
     const now = Date.now();
     const unlogged = await db.sessions
       .filter((s) => !s.logged && s.badgeExpiry !== null && s.badgeExpiry! > now)

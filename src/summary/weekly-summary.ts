@@ -1,7 +1,7 @@
 import type { Session } from "../db/index";
 
 export const DASHBOARD_LIVE = true;
-export const DASHBOARD_URL = "https://ripplup.app";
+export const DASHBOARD_URL = "https://me.ripplup.app";
 
 export interface WeeklySummary {
   startDate: string;

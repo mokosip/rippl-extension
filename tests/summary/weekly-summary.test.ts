@@ -69,6 +69,30 @@ describe("computeWeeklySummary", () => {
     expect(result.topActivity).toEqual({ name: "Code", percentage: 67 });
   });
 
+  it("counts each activity separately when sessions have multiple types", () => {
+    const sessions = [
+      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Code", "Research"] }),
+      baseSession({ id: "s2", date: "2024-01-01", logged: true, activityType: ["Code"] }),
+      baseSession({ id: "s3", date: "2024-01-01", logged: true, activityType: ["Research", "Writing"] }),
+    ];
+    const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
+
+    // Code: 2, Research: 2, Writing: 1 — Code wins (first encountered at max)
+    expect(result.topActivity).not.toBeNull();
+    expect(["Code", "Research"]).toContain(result.topActivity!.name);
+  });
+
+  it("handles custom activity types in summary", () => {
+    const sessions = [
+      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Data analysis"] }),
+      baseSession({ id: "s2", date: "2024-01-01", logged: true, activityType: ["Data analysis"] }),
+      baseSession({ id: "s3", date: "2024-01-01", logged: true, activityType: ["Code"] }),
+    ];
+    const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
+
+    expect(result.topActivity).toEqual({ name: "Data analysis", percentage: 67 });
+  });
+
   it("returns null topActivity when <50% sessions logged", () => {
     const sessions = [
       baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Code"] }),
