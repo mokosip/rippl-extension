@@ -221,8 +221,13 @@ btnResume.addEventListener("click", async () => {
 let allActivities: string[] = [...DEFAULT_ACTIVITIES];
 
 async function loadActivities(): Promise<void> {
-  const config = await db.config.get("customActivities");
-  const custom = (config?.value as string[]) ?? [];
+  const enabledConfig = await db.config.get("enabledActivities");
+  if (enabledConfig) {
+    allActivities = enabledConfig.value as string[];
+    return;
+  }
+  const customConfig = await db.config.get("customActivities");
+  const custom = (customConfig?.value as string[]) ?? [];
   allActivities = [...DEFAULT_ACTIVITIES, ...custom];
 }
 

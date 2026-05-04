@@ -16,7 +16,14 @@ const uniqueDomains = AI_DOMAINS.filter(
 );
 
 const DEFAULT_ACTIVITIES = ["Writing", "Code", "Research", "Creative", "Other"];
-let customActivities: string[] = [];
+
+interface ActivityItem {
+  name: string;
+  enabled: boolean;
+  custom: boolean;
+}
+
+let activityItems: ActivityItem[] = [];
 
 // --- DOM refs ---
 const grid = document.getElementById("domain-grid")!;
@@ -86,8 +93,25 @@ async function init() {
     });
   }
 
-  const savedActivities = await db.config.get("customActivities");
-  customActivities = (savedActivities?.value as string[]) ?? [];
+  const savedEnabledActivities = await db.config.get("enabledActivities");
+  const savedCustomActivities = await db.config.get("customActivities");
+  const enabledSet = savedEnabledActivities
+    ? new Set(savedEnabledActivities.value as string[])
+    : null;
+  const customList = (savedCustomActivities?.value as string[]) ?? [];
+
+  activityItems = DEFAULT_ACTIVITIES.map((name) => ({
+    name,
+    enabled: enabledSet ? enabledSet.has(name) : true,
+    custom: false,
+  }));
+  for (const name of customList) {
+    activityItems.push({
+      name,
+      enabled: enabledSet ? enabledSet.has(name) : true,
+      custom: true,
+    });
+  }
 
   if (toastConfig?.value === true) {
     toastCheckbox.checked = true;
@@ -144,23 +168,31 @@ customInput.addEventListener("keydown", (e) => {
 // --- Activity types ---
 function renderActivities() {
   activityGrid.innerHTML = "";
-  for (const activity of [...DEFAULT_ACTIVITIES, ...customActivities]) {
+  for (const item of activityItems) {
     const label = document.createElement("label");
     label.className = "domain-item";
 
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = item.enabled;
+    checkbox.addEventListener("change", () => {
+      item.enabled = checkbox.checked;
+    });
+
     const span = document.createElement("span");
     span.className = "domain-label";
-    span.textContent = activity;
+    span.textContent = item.name;
 
+    label.appendChild(checkbox);
     label.appendChild(span);
 
-    if (!DEFAULT_ACTIVITIES.includes(activity)) {
+    if (item.custom) {
       const removeBtn = document.createElement("button");
       removeBtn.className = "btn-remove";
       removeBtn.textContent = "×";
       removeBtn.type = "button";
       removeBtn.addEventListener("click", () => {
-        customActivities = customActivities.filter((a) => a !== activity);
+        activityItems = activityItems.filter((a) => a !== item);
         renderActivities();
       });
       label.appendChild(removeBtn);
@@ -173,12 +205,11 @@ function renderActivities() {
 function addCustomActivity() {
   const raw = activityInput.value.trim();
   if (!raw) return;
-  const all = [...DEFAULT_ACTIVITIES, ...customActivities];
-  if (all.some((a) => a.toLowerCase() === raw.toLowerCase())) {
+  if (activityItems.some((a) => a.name.toLowerCase() === raw.toLowerCase())) {
     activityInput.value = "";
     return;
   }
-  customActivities.push(raw);
+  activityItems.push({ name: raw, enabled: true, custom: true });
   activityInput.value = "";
   renderActivities();
 }
@@ -281,8 +312,11 @@ ctaBtn.addEventListener("click", async () => {
     });
   }
 
-  // 5. Save custom activities
-  await db.config.put({ key: "customActivities", value: customActivities });
+  // 5. Save activity config
+  const enabledActivities = activityItems.filter((a) => a.enabled).map((a) => a.name);
+  const customActivityNames = activityItems.filter((a) => a.custom).map((a) => a.name);
+  await db.config.put({ key: "enabledActivities", value: enabledActivities });
+  await db.config.put({ key: "customActivities", value: customActivityNames });
 
   // Handle toast opt-in/out
   if (toastCheckbox.checked) {
