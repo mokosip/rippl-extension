@@ -58,6 +58,27 @@
       </span>
     </label>
 
+    <hr class="divider">
+
+    <section class="dashboard-section">
+      <h2 class="section-title">Connect to Dashboard</h2>
+      <p class="dashboard-hint">
+        Paste your token from <a href="https://me.ripplup.app" target="_blank" rel="noopener">me.ripplup.app</a> to sync your data.
+      </p>
+      <div class="token-row">
+        <input
+          id="token-input"
+          type="text"
+          class="token-input"
+          placeholder="Paste your dashboard token"
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <button id="connect-btn" class="btn-connect" type="button">Connect</button>
+      </div>
+      <div id="dashboard-status" class="dashboard-status"></div>
+    </section>
+
     <button id="cta" class="cta-btn">
       Let's discover your AI time
     </button>

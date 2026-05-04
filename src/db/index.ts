@@ -12,6 +12,7 @@ export interface Session {
   timeSavedMinutes: number | null;
   logged: boolean;
   badgeExpiry: number | null; // timestamp — 24h after session end
+  syncStatus: "pending" | "synced" | "local"; // local = no dashboard linked
 }
 
 export interface Config {
@@ -35,6 +36,16 @@ db.version(1).stores({
   sessions: "id, domain, date, logged, badgeExpiry",
   config: "key",
   customDomains: "hostname",
+});
+
+db.version(2).stores({
+  sessions: "id, domain, date, logged, badgeExpiry, syncStatus",
+  config: "key",
+  customDomains: "hostname",
+}).upgrade(tx => {
+  return tx.table("sessions").toCollection().modify(session => {
+    session.syncStatus = "local";
+  });
 });
 
 export { db };

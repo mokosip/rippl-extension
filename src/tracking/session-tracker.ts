@@ -77,6 +77,7 @@ export class SessionTracker {
       timeSavedMinutes: null,
       logged: false,
       badgeExpiry: endedAt + BADGE_EXPIRY_MS,
+      syncStatus: "pending",
     };
 
     await db.sessions.put(session);

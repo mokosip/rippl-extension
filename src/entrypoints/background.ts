@@ -3,6 +3,7 @@ import { SessionTracker } from "@/tracking/session-tracker";
 import { updateBadge } from "@/badge/badge-manager";
 import { db } from "@/db/index";
 import { pruneOldSessions } from "@/db/queries";
+import { setAuthToken, syncSessions, setupPeriodicSync, handleSyncAlarm } from "@/sync/dashboard-sync";
 
 export default defineBackground(() => {
   console.log("[rippl] service worker started");
@@ -137,6 +138,7 @@ export default defineBackground(() => {
   });
 
   chrome.alarms.onAlarm.addListener(async (alarm) => {
+    if (handleSyncAlarm(alarm.name)) return;
     if (alarm.name === HEARTBEAT_ALARM) {
       tracker.onHeartbeat();
       const active = tracker.getActiveSession();
@@ -168,6 +170,15 @@ export default defineBackground(() => {
     }
   });
 
+  chrome.runtime.onMessageExternal.addListener(async (msg, sender, sendResponse) => {
+    if (msg?.type === "rippl-auth" && typeof msg.token === "string") {
+      console.log("[rippl] received dashboard token from", sender.url);
+      await setAuthToken(msg.token);
+      await syncSessions();
+      sendResponse({ ok: true });
+    }
+  });
+
   chrome.runtime.onInstalled.addListener(async (details) => {
     if (details.reason === "install") {
       await chrome.tabs.create({ url: chrome.runtime.getURL("/welcome.html") });
@@ -175,4 +186,5 @@ export default defineBackground(() => {
   });
 
   pruneOldSessions();
+  setupPeriodicSync();
 });

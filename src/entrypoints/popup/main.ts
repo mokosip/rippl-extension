@@ -5,6 +5,7 @@ import { isTrackingPaused, setTrackingPaused } from "@/privacy/privacy-controls"
 import { computeDailySummary } from "@/summary/daily-summary";
 import { humanScaleComparison } from "@/summary/seeds";
 import { computeWeeklySummary } from "@/summary/weekly-summary";
+import { syncSessions } from "@/sync/dashboard-sync";
 
 // ---------------------------------------------------------------------------
 // DOM refs
@@ -252,6 +253,7 @@ async function tryLog(): Promise<void> {
 
   await logSession(currentSession.id, selectedActivity, estimatedWithoutMinutes);
   await refreshBadge();
+  syncSessions();
 
   // If there are more sessions queued, show the next one
   if (sessionQueue.length > 0) {
@@ -298,6 +300,7 @@ btnSkip.addEventListener("click", async () => {
   if (!currentSession) return;
   await skipSession(currentSession.id);
   await refreshBadge();
+  syncSessions();
 
   if (sessionQueue.length > 0) {
     const next = sessionQueue.shift()!;
@@ -439,6 +442,7 @@ btnLogEach.addEventListener("click", async () => {
 btnSkipAll.addEventListener("click", async () => {
   await skipAllUnlogged();
   await refreshBadge();
+  syncSessions();
   await renderSummary();
 });
 

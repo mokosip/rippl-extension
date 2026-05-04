@@ -7,7 +7,10 @@ export default defineConfig({
     version: "0.1.0",
     description: "Tracks time spent on AI tools and shows how AI shapes your day. All data stays local.",
     permissions: ["tabs", "storage", "idle", "alarms", "notifications", "scripting"],
-    host_permissions: [],
+    host_permissions: ["https://me.ripplup.app/*", "http://localhost/*"],
     optional_host_permissions: ["<all_urls>"],
+    externally_connectable: {
+      matches: ["https://me.ripplup.app/*", "http://localhost/*"],
+    },
   },
 });

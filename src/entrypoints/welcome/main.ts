@@ -1,5 +1,6 @@
 import { AI_DOMAINS, type DomainEntry } from "@/domains/ai-domains";
 import { db } from "@/db/index";
+import { getAuthToken, setAuthToken, clearAuthToken, syncSessions } from "@/sync/dashboard-sync";
 
 // --- State ---
 interface DomainItem {
@@ -16,6 +17,9 @@ const customInput = document.getElementById("custom-input") as HTMLInputElement;
 const addCustomBtn = document.getElementById("add-custom-btn")!;
 const toastCheckbox = document.getElementById("toast-checkbox") as HTMLInputElement;
 const ctaBtn = document.getElementById("cta")!;
+const tokenInput = document.getElementById("token-input") as HTMLInputElement;
+const connectBtn = document.getElementById("connect-btn")!;
+const dashboardStatus = document.getElementById("dashboard-status")!;
 
 // --- Render domain grid ---
 function renderGrid() {
@@ -122,6 +126,68 @@ customInput.addEventListener("keydown", (e) => {
     addCustomDomain();
   }
 });
+
+// --- Dashboard connection ---
+async function updateDashboardStatus() {
+  const token = await getAuthToken();
+  if (token) {
+    dashboardStatus.textContent = "Connected to dashboard";
+    dashboardStatus.className = "dashboard-status connected";
+    tokenInput.value = "";
+    tokenInput.placeholder = "••••••••";
+    tokenInput.disabled = true;
+    connectBtn.textContent = "Disconnect";
+    connectBtn.onclick = async () => {
+      await clearAuthToken();
+      tokenInput.disabled = false;
+      tokenInput.placeholder = "Paste your dashboard token";
+      connectBtn.textContent = "Connect";
+      connectBtn.onclick = handleConnect;
+      updateDashboardStatus();
+    };
+  } else {
+    dashboardStatus.textContent = "";
+    dashboardStatus.className = "dashboard-status";
+    tokenInput.disabled = false;
+    connectBtn.textContent = "Connect";
+    connectBtn.onclick = handleConnect;
+  }
+}
+
+async function handleConnect() {
+  const token = tokenInput.value.trim();
+  if (!token) {
+    dashboardStatus.textContent = "Please paste a token";
+    dashboardStatus.className = "dashboard-status error";
+    return;
+  }
+
+  connectBtn.textContent = "Connecting…";
+  connectBtn.disabled = true;
+
+  try {
+    await setAuthToken(token);
+    await syncSessions();
+
+    const storedToken = await getAuthToken();
+    if (storedToken) {
+      dashboardStatus.textContent = "Connected — syncing sessions";
+      dashboardStatus.className = "dashboard-status success";
+    } else {
+      dashboardStatus.textContent = "Token rejected by dashboard";
+      dashboardStatus.className = "dashboard-status error";
+    }
+  } catch {
+    dashboardStatus.textContent = "Connection failed";
+    dashboardStatus.className = "dashboard-status error";
+  }
+
+  connectBtn.disabled = false;
+  updateDashboardStatus();
+}
+
+connectBtn.addEventListener("click", handleConnect);
+updateDashboardStatus();
 
 // --- CTA ---
 ctaBtn.addEventListener("click", async () => {

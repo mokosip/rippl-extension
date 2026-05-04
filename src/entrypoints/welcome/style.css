@@ -261,6 +261,97 @@ body {
   margin-top: 0.125rem;
 }
 
+/* Dashboard connection */
+.dashboard-section {
+  width: 100%;
+  text-align: center;
+}
+
+.dashboard-hint {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.dashboard-hint a {
+  color: var(--moss);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.dashboard-hint a:hover {
+  text-decoration: underline;
+}
+
+.token-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.token-input {
+  flex: 1;
+  max-width: 320px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--cream);
+  color: var(--ink);
+  font-family: monospace;
+  font-size: 0.8125rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.token-input:focus {
+  border-color: var(--moss);
+}
+
+.token-input::placeholder {
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+}
+
+.btn-connect {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--moss);
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--moss);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-connect:hover {
+  background: var(--moss);
+  color: #fff;
+}
+
+.dashboard-status {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  min-height: 1.25rem;
+}
+
+.dashboard-status.success {
+  color: var(--moss);
+}
+
+.dashboard-status.error {
+  color: var(--terra);
+}
+
+.dashboard-status.connected {
+  color: var(--moss);
+  font-weight: 500;
+}
+
 /* CTA button */
 .cta-btn {
   display: inline-block;
