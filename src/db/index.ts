@@ -1,5 +1,20 @@
 import Dexie, { type EntityTable } from "dexie";
 
+export interface Session {
+  id: string;
+  domain: string;
+  startedAt: number;
+  endedAt: number;
+  activeSeconds: number;
+  date: string;
+  activityType: string[] | null;
+  estimatedWithoutMinutes: number | null;
+  timeSavedMinutes: number | null;
+  logged: boolean;
+  badgeExpiry: number | null;
+  syncStatus?: "pending" | "synced" | "local";
+}
+
 export interface ActivitySession {
   id: string;
   domain: string;
@@ -39,6 +54,7 @@ export interface CustomDomain {
 
 export function createRipplDb(name = "rippl") {
   const database = new Dexie(name) as Dexie & {
+    sessions: EntityTable<Session, "id">;
     activitySessions: EntityTable<ActivitySession, "id">;
     feedbackQueue: EntityTable<FeedbackQueueItem, "id">;
     config: EntityTable<Config, "key">;
@@ -48,6 +64,7 @@ export function createRipplDb(name = "rippl") {
   database
     .version(3)
     .stores({
+      sessions: "id, domain, date, logged, badgeExpiry, syncStatus",
       activitySessions: "id, domain, startedAt, endedAt, syncStatus, createdAt",
       feedbackQueue: "id, sessionId, status, expiresAt, createdAt",
       config: "key",
