@@ -1,5 +1,6 @@
 import { getEnabledDomains, matchURL } from "@/domains/ai-domains";
 import { SessionTracker } from "@/tracking/session-tracker";
+import type { InteractionUpdateMessage } from "@/tracking/signal-types";
 import { updateBadge } from "@/badge/badge-manager";
 import { db } from "@/db/index";
 import { pruneOldSessions } from "@/db/queries";
@@ -10,10 +11,100 @@ export default defineBackground(() => {
   const tracker = new SessionTracker();
   const HEARTBEAT_ALARM = "rippl-heartbeat";
   const IDLE_THRESHOLD = 300; // 5 min
+  const SIGNAL_FLUSH_INTERVAL_MS = 5000;
+  let activeTrackedTabId: number | null = null;
+
+  async function injectSignalCollector(tabId: number): Promise<void> {
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (flushIntervalMs: number) => {
+          const key = "__rippl_signal_installed__";
+          const scope = globalThis as typeof globalThis & Record<string, unknown>;
+          if (scope[key]) return;
+          scope[key] = true;
+
+          let interactionCount = 0;
+          let copyEvents = 0;
+          let pasteEvents = 0;
+          let lastActivity = Date.now();
+          let lastFlushedActivity = lastActivity;
+
+          const flush = () => {
+            if (
+              interactionCount === 0 &&
+              copyEvents === 0 &&
+              pasteEvents === 0 &&
+              lastActivity === lastFlushedActivity
+            ) {
+              return;
+            }
+
+            chrome.runtime
+              .sendMessage({
+                type: "interaction-update",
+                counts: {
+                  interaction_count: interactionCount,
+                  copy_events: copyEvents,
+                  paste_events: pasteEvents,
+                  activityTs: lastActivity,
+                },
+              })
+              .catch(() => {});
+
+            interactionCount = 0;
+            copyEvents = 0;
+            pasteEvents = 0;
+            lastFlushedActivity = lastActivity;
+          };
+
+          const markActivity = () => {
+            lastActivity = Date.now();
+          };
+
+          const onInteraction = () => {
+            interactionCount += 1;
+            markActivity();
+          };
+
+          const onCopy = () => {
+            copyEvents += 1;
+            markActivity();
+          };
+
+          const onPaste = () => {
+            pasteEvents += 1;
+            markActivity();
+          };
+
+          document.addEventListener("click", onInteraction, true);
+          document.addEventListener("keydown", onInteraction, true);
+          document.addEventListener("copy", onCopy, true);
+          document.addEventListener("paste", onPaste, true);
+          document.addEventListener("mousemove", markActivity, { capture: true, passive: true });
+          document.addEventListener("scroll", markActivity, { capture: true, passive: true });
+          document.addEventListener(
+            "visibilitychange",
+            () => {
+              if (document.visibilityState === "hidden") flush();
+            },
+            true
+          );
+          window.addEventListener("beforeunload", flush, true);
+
+          setInterval(flush, flushIntervalMs);
+        },
+        args: [SIGNAL_FLUSH_INTERVAL_MS],
+      });
+    } catch (e) {
+      console.log("[rippl] signal collector inject failed", (e as Error).message);
+    }
+  }
 
   // Handle session end: OS notification + optional toast
   tracker.onSessionEnd = async (session) => {
-    const mins = Math.round(session.activeSeconds / 60);
+    const trackedMs = typeof session.activeMs === "number" ? session.activeMs : session.durationMs;
+    const mins = Math.round(trackedMs / 60_000);
     const duration = mins < 1 ? "<1 min" : `${mins} min`;
 
     // OS notification (always)
@@ -22,7 +113,7 @@ export default defineBackground(() => {
         type: "basic",
         iconUrl: chrome.runtime.getURL("icon/128.png"),
         title: `Tracked ${duration} on ${session.domain}`,
-        message: "Click the rippl icon to log what you did.",
+        message: "Click rippl icon to log what you did.",
         priority: 0,
       });
       console.log("[rippl] notification sent");
@@ -33,7 +124,6 @@ export default defineBackground(() => {
     // Toast (if enabled) — inject directly via chrome.scripting
     const toastConfig = await db.config.get("toastEnabled");
     if (toastConfig?.value === true) {
-      const popupUrl = chrome.runtime.getURL("/popup.html");
       const injectToast = async () => {
         const delays = [500, 1500, 3000];
         for (const delay of delays) {
@@ -102,6 +192,7 @@ export default defineBackground(() => {
   async function handleTabChange(tabId: number) {
     const paused = await isPaused();
     if (paused) {
+      activeTrackedTabId = null;
       await tracker.onTabFocused(null);
       await chrome.alarms.clear(HEARTBEAT_ALARM);
       return;
@@ -115,13 +206,17 @@ export default defineBackground(() => {
       await tracker.onTabFocused(domain);
 
       if (domain) {
+        activeTrackedTabId = tabId;
         await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
+        await injectSignalCollector(tabId);
       } else {
+        activeTrackedTabId = null;
         await chrome.alarms.clear(HEARTBEAT_ALARM);
       }
 
       await updateBadge(paused);
     } catch {
+      activeTrackedTabId = null;
       await tracker.onTabFocused(null);
       await chrome.alarms.clear(HEARTBEAT_ALARM);
     }
@@ -135,6 +230,10 @@ export default defineBackground(() => {
     if (changeInfo.status === "complete" && tab.active) {
       await handleTabChange(tabId);
     }
+  });
+
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    if (tabId === activeTrackedTabId) activeTrackedTabId = null;
   });
 
   chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -154,6 +253,7 @@ export default defineBackground(() => {
   chrome.idle.onStateChanged.addListener(async (newState) => {
     console.log("[rippl] idle state →", newState);
     if (newState === "idle" || newState === "locked") {
+      activeTrackedTabId = null;
       await tracker.onIdle();
       await chrome.alarms.clear(HEARTBEAT_ALARM);
       const paused = await isPaused();
@@ -164,10 +264,24 @@ export default defineBackground(() => {
     }
   });
 
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "rippl-open-popup") {
+  chrome.runtime.onMessage.addListener((msg: unknown, sender) => {
+    if ((msg as { type?: string })?.type === "rippl-open-popup") {
       chrome.action.openPopup().catch(() => {});
+      return;
     }
+
+    if ((msg as { type?: string })?.type !== "interaction-update") return;
+    if (!sender.tab?.id || sender.tab.id !== activeTrackedTabId) return;
+
+    const { counts } = msg as InteractionUpdateMessage;
+    if (!counts) return;
+
+    tracker.onSignalDelta({
+      interaction_count: typeof counts.interaction_count === "number" ? counts.interaction_count : 0,
+      copy_events: typeof counts.copy_events === "number" ? counts.copy_events : 0,
+      paste_events: typeof counts.paste_events === "number" ? counts.paste_events : 0,
+      activityTs: typeof counts.activityTs === "number" ? counts.activityTs : undefined,
+    });
   });
 
   chrome.runtime.onMessageExternal.addListener(async (msg, sender, sendResponse) => {
