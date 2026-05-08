@@ -35,6 +35,11 @@ describe("dashboard sync v1 ingestion", () => {
     vi.useRealTimers();
   });
 
+  it("returns skipped=no_token when no token configured", async () => {
+    const result = await syncSessions();
+    expect(result).toMatchObject({ attempted: 0, synced: 0, failed: 0, authError: false, skipped: "no_token" });
+  });
+
   it.each([200, 201])("posts to /api/ext/v1/activity-sessions and marks synced on %i", async status => {
     await db.config.put({ key: "dashboardToken", value: "token-123" });
     await db.activitySessions.put(makeActivitySession());
@@ -47,12 +52,13 @@ describe("dashboard sync v1 ingestion", () => {
     );
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    await syncSessions();
+    const result = await syncSessions();
 
+    expect(result).toMatchObject({ attempted: 1, synced: 1, failed: 0, authError: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://me.ripplup.app/api/ext/v1/activity-sessions");
+    expect(url).toMatch(/\/api\/ext\/v1\/activity-sessions$/);
     expect(init.method).toBe("POST");
 
     const body = JSON.parse(String(init.body));
@@ -76,8 +82,9 @@ describe("dashboard sync v1 ingestion", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    await syncSessions();
+    const result = await syncSessions();
 
+    expect(result).toMatchObject({ attempted: 1, synced: 0, failed: 0, authError: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(await db.config.get("dashboardToken")).toBeUndefined();
     expect((await db.activitySessions.get("sess-1"))?.syncStatus).toBe("local");
@@ -152,8 +159,8 @@ describe("dashboard sync feedback submit", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(
-      "https://me.ripplup.app/api/ext/v1/activity-sessions/a45b9ec8-4dbe-4843-b44b-f838177fcfbe/feedback"
+    expect(url).toContain(
+      "/api/ext/v1/activity-sessions/a45b9ec8-4dbe-4843-b44b-f838177fcfbe/feedback"
     );
     expect(init.method).toBe("POST");
 

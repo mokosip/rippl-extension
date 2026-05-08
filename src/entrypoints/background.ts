@@ -1,7 +1,7 @@
 import { getEnabledDomains, matchURL } from "@/domains/ai-domains";
 import { SessionTracker } from "@/tracking/session-tracker";
 import type { InteractionUpdateMessage } from "@/tracking/signal-types";
-import { updateBadge } from "@/badge/badge-manager";
+import { showExtensionBanner, updateBadge } from "@/badge/badge-manager";
 import { db } from "@/db/index";
 import { pruneOldSessions } from "@/db/queries";
 import { setAuthToken, syncSessions, setupPeriodicSync, handleSyncAlarm } from "@/sync/dashboard-sync";
@@ -141,6 +141,15 @@ export default defineBackground(() => {
       console.log("[rippl] notification sent");
     } catch (e) {
       console.error("[rippl] notification failed", e);
+    }
+
+    const syncSummary = await syncSessions();
+    if (syncSummary.authError || syncSummary.failed > 0) {
+      await showExtensionBanner("!", "#B05F3F", 7000);
+    } else if (syncSummary.synced > 0) {
+      await showExtensionBanner("✓", "#5C7A52", 5000);
+    } else {
+      await showExtensionBanner("•", "#8C8478", 3000);
     }
 
     // Toast (if enabled) — inject directly via chrome.scripting

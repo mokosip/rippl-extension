@@ -1,0 +1,18 @@
+{"text":"continue","timestamp":1778282545367}
+{"text":"continue, 404 on running test dashboard","timestamp":1778282545367}
+{"text":"continue","timestamp":1778282545367}
+{"text":"yes pls add, also make sure to add a \"notification banner\" on the extension itself so the user sees, that something has happened","timestamp":1778282545367}
+{"text":"it works - but when will ingestion trigger?","timestamp":1778282545367}
+{"text":"Failed to load resource: the server responded with a status of 403 () on connecting with the rpl-token from the dashboard","timestamp":1778282545367}
+{"text":"make sure to get the correct api url for the ingest pipeline from the backend not storyspec","timestamp":1778282545367}
+{"text":"complete full sync refactor, follow the original plan to the end","timestamp":1778282545367}
+{"text":"only patch new api endpoints","timestamp":1778282545367}
+{"text":"with the ending \"boal\" is correct id","timestamp":1778282545367}
+{"text":"make sure the extension pelkpjhfgdohfhmkpgonmcchmipdboa is able to call the api of my locally started backend (without cors errors)","timestamp":1778282545367}
+{"text":"use sub agent driven dev","timestamp":1778282545367}
+{"text":"approved","timestamp":1778282545367}
+{"text":"y","timestamp":1778282545367}
+{"text":"no","timestamp":1778282545367}
+{"text":"A","timestamp":1778282545367}
+{"text":"ingestion pipeline is currenlt being built in @../rippl-dashboard - lets build the extension pivot here.","timestamp":1778282545367}
+{"text":"read @../rippl-backlog/epics/extension-pivot.md","timestamp":1778282545367}

@@ -11,6 +11,14 @@ const FEEDBACK_ENDPOINT = (id: string) => `${INGEST_ENDPOINT}/${id}/feedback`;
 const SYNC_ALARM = "rippl-dashboard-sync";
 const SYNC_INTERVAL_MINUTES = 60;
 
+export type SyncSummary = {
+  attempted: number;
+  synced: number;
+  failed: number;
+  authError: boolean;
+  skipped: "no_token" | "no_pending" | null;
+};
+
 function getExtensionVersion(): string {
   try {
     return chrome.runtime.getManifest?.().version ?? "unknown";
@@ -105,14 +113,26 @@ async function queueFeedbackFromIngestionResponse(response: Response): Promise<v
   });
 }
 
-export async function syncSessions(): Promise<void> {
+export async function syncSessions(): Promise<SyncSummary> {
   const token = await getAuthToken();
-  if (!token) return;
+  if (!token) {
+    return { attempted: 0, synced: 0, failed: 0, authError: false, skipped: "no_token" };
+  }
 
   const pending = await getPendingSessions();
-  if (pending.length === 0) return;
+  if (pending.length === 0) {
+    return { attempted: 0, synced: 0, failed: 0, authError: false, skipped: "no_pending" };
+  }
 
   console.log("[rippl-sync] syncing", pending.length, "sessions");
+
+  const summary: SyncSummary = {
+    attempted: pending.length,
+    synced: 0,
+    failed: 0,
+    authError: false,
+    skipped: null,
+  };
 
   for (const session of pending) {
     try {
@@ -129,21 +149,27 @@ export async function syncSessions(): Promise<void> {
         console.warn("[rippl-sync] 401 — token invalid, clearing");
         await clearAuthToken();
         await db.activitySessions.where("syncStatus").notEqual("synced").modify({ syncStatus: "local" });
-        return;
+        summary.authError = true;
+        return summary;
       }
 
       if (!res.ok) {
         console.error("[rippl-sync] sync failed", res.status, session.id);
+        summary.failed += 1;
         continue;
       }
 
       await queueFeedbackFromIngestionResponse(res);
       await db.activitySessions.update(session.id, { syncStatus: "synced" });
+      summary.synced += 1;
       console.log("[rippl-sync] synced session", session.id);
     } catch (e) {
       console.error("[rippl-sync] network error", e);
+      summary.failed += 1;
     }
   }
+
+  return summary;
 }
 
 export async function submitSessionFeedback(
