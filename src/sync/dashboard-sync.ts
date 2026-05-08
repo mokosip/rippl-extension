@@ -6,7 +6,7 @@ import {
 } from "../ingestion/activity-session-payload";
 
 const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL ?? "https://me.ripplup.app";
-const INGEST_ENDPOINT = "/api/ext/v1/activity-sessions";
+const INGEST_ENDPOINT = "/v1/activity-sessions";
 const FEEDBACK_ENDPOINT = (id: string) => `${INGEST_ENDPOINT}/${id}/feedback`;
 const SYNC_ALARM = "rippl-dashboard-sync";
 const SYNC_INTERVAL_MINUTES = 60;
@@ -76,7 +76,7 @@ async function getPendingSessions(): Promise<ActivitySession[]> {
   return db.activitySessions.where("syncStatus").equals("pending").sortBy("createdAt");
 }
 
-async function queueFeedbackFromIngestionResponse(sessionId: string, response: Response): Promise<void> {
+async function queueFeedbackFromIngestionResponse(response: Response): Promise<void> {
   let responseBody: unknown;
 
   try {
@@ -88,8 +88,18 @@ async function queueFeedbackFromIngestionResponse(sessionId: string, response: R
   const parsed = parseFeedbackRequest(responseBody as Parameters<typeof parseFeedbackRequest>[0]);
   if (!parsed) return;
 
+  const backendSessionId =
+    typeof responseBody === "object" && responseBody !== null
+      ? (responseBody as { session_id?: unknown }).session_id
+      : undefined;
+
+  if (typeof backendSessionId !== "string" || backendSessionId.trim() === "") {
+    console.warn("[rippl-sync] missing session_id in feedback response payload");
+    return;
+  }
+
   await queueFeedback({
-    sessionId,
+    sessionId: backendSessionId,
     question: parsed.question,
     options: parsed.options,
   });
@@ -118,6 +128,7 @@ export async function syncSessions(): Promise<void> {
       if (res.status === 401) {
         console.warn("[rippl-sync] 401 — token invalid, clearing");
         await clearAuthToken();
+        await db.activitySessions.where("syncStatus").notEqual("synced").modify({ syncStatus: "local" });
         return;
       }
 
@@ -126,7 +137,7 @@ export async function syncSessions(): Promise<void> {
         continue;
       }
 
-      await queueFeedbackFromIngestionResponse(session.id, res);
+      await queueFeedbackFromIngestionResponse(res);
       await db.activitySessions.update(session.id, { syncStatus: "synced" });
       console.log("[rippl-sync] synced session", session.id);
     } catch (e) {
@@ -135,7 +146,11 @@ export async function syncSessions(): Promise<void> {
   }
 }
 
-export async function submitSessionFeedback(sessionId: string, value: string): Promise<boolean> {
+export async function submitSessionFeedback(
+  sessionId: string,
+  value: string,
+  type = "task_type",
+): Promise<boolean> {
   const token = await getAuthToken();
   if (!token) return false;
 
@@ -146,12 +161,16 @@ export async function submitSessionFeedback(sessionId: string, value: string): P
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ value }),
+      body: JSON.stringify({ type, value }),
     });
 
     if (res.status === 401) {
       await clearAuthToken();
       return false;
+    }
+
+    if (res.status === 404) {
+      return true;
     }
 
     return res.ok;
