@@ -6,7 +6,7 @@ import {
 } from "../ingestion/activity-session-payload";
 
 const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL ?? "https://me.ripplup.app";
-const INGEST_ENDPOINT = "/v1/activity-sessions";
+const INGEST_ENDPOINT = "/api/ext/v1/activity-sessions";
 const FEEDBACK_ENDPOINT = (id: string) => `${INGEST_ENDPOINT}/${id}/feedback`;
 const SYNC_ALARM = "rippl-dashboard-sync";
 const SYNC_INTERVAL_MINUTES = 60;

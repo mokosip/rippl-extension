@@ -35,7 +35,7 @@ describe("dashboard sync v1 ingestion", () => {
     vi.useRealTimers();
   });
 
-  it.each([200, 201])("posts to /v1/activity-sessions and marks synced on %i", async status => {
+  it.each([200, 201])("posts to /api/ext/v1/activity-sessions and marks synced on %i", async status => {
     await db.config.put({ key: "dashboardToken", value: "token-123" });
     await db.activitySessions.put(makeActivitySession());
 
@@ -52,7 +52,7 @@ describe("dashboard sync v1 ingestion", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://me.ripplup.app/v1/activity-sessions");
+    expect(url).toBe("https://me.ripplup.app/api/ext/v1/activity-sessions");
     expect(init.method).toBe("POST");
 
     const body = JSON.parse(String(init.body));
@@ -153,7 +153,7 @@ describe("dashboard sync feedback submit", () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
-      "https://me.ripplup.app/v1/activity-sessions/a45b9ec8-4dbe-4843-b44b-f838177fcfbe/feedback"
+      "https://me.ripplup.app/api/ext/v1/activity-sessions/a45b9ec8-4dbe-4843-b44b-f838177fcfbe/feedback"
     );
     expect(init.method).toBe("POST");
 
