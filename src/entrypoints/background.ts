@@ -12,13 +12,14 @@ export default defineBackground(() => {
   const HEARTBEAT_ALARM = "rippl-heartbeat";
   const IDLE_THRESHOLD = 300; // 5 min
   const SIGNAL_FLUSH_INTERVAL_MS = 5000;
+  const RESET_SIGNAL_COUNTERS_MESSAGE_TYPE = "rippl-reset-interaction-counters";
   let activeTrackedTabId: number | null = null;
 
   async function injectSignalCollector(tabId: number): Promise<void> {
     try {
       await chrome.scripting.executeScript({
         target: { tabId },
-        func: (flushIntervalMs: number) => {
+        func: (flushIntervalMs: number, resetMessageType: string) => {
           const key = "__rippl_signal_installed__";
           const scope = globalThis as typeof globalThis & Record<string, unknown>;
           if (scope[key]) return;
@@ -29,6 +30,14 @@ export default defineBackground(() => {
           let pasteEvents = 0;
           let lastActivity = Date.now();
           let lastFlushedActivity = lastActivity;
+
+          const resetCounters = () => {
+            interactionCount = 0;
+            copyEvents = 0;
+            pasteEvents = 0;
+            lastActivity = Date.now();
+            lastFlushedActivity = lastActivity;
+          };
 
           const flush = () => {
             if (
@@ -77,6 +86,11 @@ export default defineBackground(() => {
             markActivity();
           };
 
+          chrome.runtime.onMessage.addListener((msg: unknown) => {
+            if ((msg as { type?: string })?.type !== resetMessageType) return;
+            resetCounters();
+          });
+
           document.addEventListener("click", onInteraction, true);
           document.addEventListener("keydown", onInteraction, true);
           document.addEventListener("copy", onCopy, true);
@@ -94,10 +108,18 @@ export default defineBackground(() => {
 
           setInterval(flush, flushIntervalMs);
         },
-        args: [SIGNAL_FLUSH_INTERVAL_MS],
+        args: [SIGNAL_FLUSH_INTERVAL_MS, RESET_SIGNAL_COUNTERS_MESSAGE_TYPE],
       });
     } catch (e) {
-      console.log("[rippl] signal collector inject failed", (e as Error).message);
+      console.warn("[rippl] signal collector inject failed", (e as Error).message);
+    }
+  }
+
+  async function resetSignalCollector(tabId: number): Promise<void> {
+    try {
+      await chrome.tabs.sendMessage(tabId, { type: RESET_SIGNAL_COUNTERS_MESSAGE_TYPE });
+    } catch {
+      // no-op: tab might not have collector yet
     }
   }
 
@@ -192,6 +214,9 @@ export default defineBackground(() => {
   async function handleTabChange(tabId: number) {
     const paused = await isPaused();
     if (paused) {
+      if (activeTrackedTabId !== null) {
+        await resetSignalCollector(activeTrackedTabId);
+      }
       activeTrackedTabId = null;
       await tracker.onTabFocused(null);
       await chrome.alarms.clear(HEARTBEAT_ALARM);
@@ -203,12 +228,19 @@ export default defineBackground(() => {
       const domains = await getEnabledDomains();
       const domain = tab.url ? matchURL(tab.url, domains) : null;
       console.log("[rippl] tab →", tab.url?.slice(0, 60), domain ? `✓ ${domain}` : "✗ not AI");
+
+      const previousSessionId = tracker.getActiveSession()?.id ?? null;
       await tracker.onTabFocused(domain);
+      const currentSessionId = tracker.getActiveSession()?.id ?? null;
+      const startedNewSession = Boolean(domain && currentSessionId && currentSessionId !== previousSessionId);
 
       if (domain) {
+        await injectSignalCollector(tabId);
+        if (startedNewSession) {
+          await resetSignalCollector(tabId);
+        }
         activeTrackedTabId = tabId;
         await chrome.alarms.create(HEARTBEAT_ALARM, { periodInMinutes: 1 });
-        await injectSignalCollector(tabId);
       } else {
         activeTrackedTabId = null;
         await chrome.alarms.clear(HEARTBEAT_ALARM);
@@ -253,7 +285,11 @@ export default defineBackground(() => {
   chrome.idle.onStateChanged.addListener(async (newState) => {
     console.log("[rippl] idle state →", newState);
     if (newState === "idle" || newState === "locked") {
+      const tabIdToReset = activeTrackedTabId;
       activeTrackedTabId = null;
+      if (tabIdToReset !== null) {
+        await resetSignalCollector(tabIdToReset);
+      }
       await tracker.onIdle();
       await chrome.alarms.clear(HEARTBEAT_ALARM);
       const paused = await isPaused();

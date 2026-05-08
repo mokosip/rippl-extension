@@ -1,5 +1,6 @@
 import { db, type ActivitySession } from "../db/index";
 import { ActiveTimeAccumulator } from "./active-time-accumulator";
+import type { SignalDelta } from "./signal-types";
 
 function generateId(): string {
   return `sess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -7,13 +8,6 @@ function generateId(): string {
 
 const MIN_SESSION_SECONDS = 10;
 const ACTIVE_IDLE_THRESHOLD_MS = 60_000;
-
-type SignalDelta = {
-  interaction_count?: number;
-  copy_events?: number;
-  paste_events?: number;
-  activityTs?: number;
-};
 
 interface ActiveSession {
   id: string;
