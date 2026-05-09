@@ -5,31 +5,39 @@ afterEach(async () => {
   await db.config.clear();
 });
 
-describe("customActivities config", () => {
-  it("stores and retrieves custom activities as string array", async () => {
-    await db.config.put({ key: "customActivities", value: ["Data analysis", "Debugging"] });
+describe("config table", () => {
+  it("stores and retrieves trackingPaused", async () => {
+    await db.config.put({ key: "trackingPaused", value: true });
 
-    const config = await db.config.get("customActivities");
-    expect(config?.value).toEqual(["Data analysis", "Debugging"]);
+    const config = await db.config.get("trackingPaused");
+    expect(config?.value).toBe(true);
   });
 
-  it("returns undefined when no custom activities configured", async () => {
-    const config = await db.config.get("customActivities");
+  it("returns undefined when key not set", async () => {
+    const config = await db.config.get("trackingPaused");
     expect(config).toBeUndefined();
   });
 
-  it("overwrites previous custom activities on put", async () => {
-    await db.config.put({ key: "customActivities", value: ["A", "B"] });
-    await db.config.put({ key: "customActivities", value: ["C"] });
+  it("overwrites previous value on put", async () => {
+    await db.config.put({ key: "trackingPaused", value: true });
+    await db.config.put({ key: "trackingPaused", value: false });
 
-    const config = await db.config.get("customActivities");
-    expect(config?.value).toEqual(["C"]);
+    const config = await db.config.get("trackingPaused");
+    expect(config?.value).toBe(false);
   });
 
-  it("stores empty array", async () => {
-    await db.config.put({ key: "customActivities", value: [] });
+  it("stores and retrieves enabledDomains as array", async () => {
+    const domains = [{ hostname: "claude.ai", label: "Claude" }];
+    await db.config.put({ key: "enabledDomains", value: domains });
 
-    const config = await db.config.get("customActivities");
-    expect(config?.value).toEqual([]);
+    const config = await db.config.get("enabledDomains");
+    expect(config?.value).toEqual(domains);
+  });
+
+  it("stores and retrieves toastEnabled flag", async () => {
+    await db.config.put({ key: "toastEnabled", value: true });
+
+    const config = await db.config.get("toastEnabled");
+    expect(config?.value).toBe(true);
   });
 });

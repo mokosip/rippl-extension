@@ -1,19 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { computeWeeklySummary } from "../../src/summary/weekly-summary";
-import type { Session } from "../../src/db/index";
+import type { ActivitySession } from "../../src/db/index";
 
-const baseSession = (overrides: Partial<Session> & { id: string; date: string }): Session => ({
-  domain: "Claude",
-  startedAt: 1000,
-  endedAt: 2000,
-  activeSeconds: 600,
-  activityType: null,
-  estimatedWithoutMinutes: null,
-  timeSavedMinutes: null,
-  logged: false,
-  badgeExpiry: null,
-  ...overrides,
-});
+function msFor(dateStr: string, hour = 12): number {
+  return Date.parse(`${dateStr}T${String(hour).padStart(2, "0")}:00:00.000Z`);
+}
+
+function makeSession(overrides: Partial<ActivitySession> & { id: string; startedAt: number }): ActivitySession {
+  return {
+    domain: "claude.ai",
+    endedAt: overrides.startedAt + 60_000,
+    durationMs: 60_000,
+    activeMs: 50_000,
+    metrics: { interaction_count: 0, copy_events: 0, paste_events: 0 },
+    syncStatus: "local",
+    createdAt: overrides.startedAt + 60_000,
+    ...overrides,
+  };
+}
 
 describe("computeWeeklySummary", () => {
   it("returns empty summary for no sessions", () => {
@@ -22,104 +26,62 @@ describe("computeWeeklySummary", () => {
       startDate: "2024-01-01",
       endDate: "2024-01-07",
       totalSessions: 0,
-      loggedSessions: 0,
-      totalActiveMinutes: 0,
-      totalTimeSavedMinutes: 0,
+      totalDurationMs: 0,
+      totalActiveMs: 0,
       mostUsedTool: null,
-      topActivity: null,
-      averageSessionMinutes: 0,
+      averageSessionMs: 0,
       dailySummaries: [],
     });
   });
 
   it("computes totals correctly", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", activeSeconds: 600, logged: true, timeSavedMinutes: 10 }),
-      baseSession({ id: "s2", date: "2024-01-02", activeSeconds: 1200, logged: true, timeSavedMinutes: 20 }),
-      baseSession({ id: "s3", date: "2024-01-03", activeSeconds: 300, logged: false }),
+      makeSession({ id: "s1", startedAt: msFor("2024-01-01"), durationMs: 600_000, activeMs: 500_000 }),
+      makeSession({ id: "s2", startedAt: msFor("2024-01-02"), durationMs: 1_200_000, activeMs: 900_000 }),
+      makeSession({ id: "s3", startedAt: msFor("2024-01-03"), durationMs: 300_000, activeMs: 280_000 }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
 
     expect(result.totalSessions).toBe(3);
-    expect(result.loggedSessions).toBe(2);
-    expect(result.totalActiveMinutes).toBe(35);
-    expect(result.totalTimeSavedMinutes).toBe(30);
+    expect(result.totalDurationMs).toBe(2_100_000);
+    expect(result.totalActiveMs).toBe(1_680_000);
+    expect(result.averageSessionMs).toBe(700_000);
   });
 
-  it("finds most-used tool by active time percentage", () => {
+  it("finds most-used tool by duration", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", domain: "Claude", activeSeconds: 600 }),
-      baseSession({ id: "s2", date: "2024-01-01", domain: "Claude", activeSeconds: 600 }),
-      baseSession({ id: "s3", date: "2024-01-01", domain: "ChatGPT", activeSeconds: 300 }),
+      makeSession({ id: "s1", startedAt: msFor("2024-01-01"), domain: "claude.ai", durationMs: 600_000 }),
+      makeSession({ id: "s2", startedAt: msFor("2024-01-01", 14), domain: "claude.ai", durationMs: 600_000 }),
+      makeSession({ id: "s3", startedAt: msFor("2024-01-01", 16), domain: "chatgpt.com", durationMs: 300_000 }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
 
-    expect(result.mostUsedTool).toEqual({ name: "Claude", percentage: 80 });
+    expect(result.mostUsedTool).toEqual({ name: "claude.ai", percentage: 80 });
   });
 
-  it("computes topActivity when >=50% sessions logged", () => {
+  it("mostUsedTool is null when totalDurationMs is zero (guard)", () => {
+    // Edge: all sessions have durationMs = 0
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Code"] }),
-      baseSession({ id: "s2", date: "2024-01-01", logged: true, activityType: ["Code"] }),
-      baseSession({ id: "s3", date: "2024-01-01", logged: true, activityType: ["Writing"] }),
-      baseSession({ id: "s4", date: "2024-01-01", logged: false }),
+      makeSession({ id: "s1", startedAt: msFor("2024-01-01"), durationMs: 0, activeMs: 0 }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
-
-    expect(result.topActivity).toEqual({ name: "Code", percentage: 67 });
+    expect(result.mostUsedTool).toBeNull();
   });
 
-  it("counts each activity separately when sessions have multiple types", () => {
-    const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Code", "Research"] }),
-      baseSession({ id: "s2", date: "2024-01-01", logged: true, activityType: ["Code"] }),
-      baseSession({ id: "s3", date: "2024-01-01", logged: true, activityType: ["Research", "Writing"] }),
-    ];
-    const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
+  it("falls back to durationMs when activeMs is missing", () => {
+    const session = makeSession({ id: "s1", startedAt: msFor("2024-01-01"), durationMs: 600_000 });
+    delete (session as Partial<ActivitySession>).activeMs;
 
-    // Code: 2, Research: 2, Writing: 1 — Code wins (first encountered at max)
-    expect(result.topActivity).not.toBeNull();
-    expect(["Code", "Research"]).toContain(result.topActivity!.name);
-  });
+    const result = computeWeeklySummary([session], "2024-01-01", "2024-01-07");
 
-  it("handles custom activity types in summary", () => {
-    const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Data analysis"] }),
-      baseSession({ id: "s2", date: "2024-01-01", logged: true, activityType: ["Data analysis"] }),
-      baseSession({ id: "s3", date: "2024-01-01", logged: true, activityType: ["Code"] }),
-    ];
-    const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
-
-    expect(result.topActivity).toEqual({ name: "Data analysis", percentage: 67 });
-  });
-
-  it("returns null topActivity when <50% sessions logged", () => {
-    const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: ["Code"] }),
-      baseSession({ id: "s2", date: "2024-01-01", logged: false }),
-      baseSession({ id: "s3", date: "2024-01-01", logged: false }),
-    ];
-    const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
-
-    expect(result.topActivity).toBeNull();
-    expect(result.averageSessionMinutes).toBe(10);
-  });
-
-  it("returns null topActivity when all logged sessions have no activityType", () => {
-    const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", logged: true, activityType: null }),
-      baseSession({ id: "s2", date: "2024-01-01", logged: true, activityType: null }),
-    ];
-    const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
-
-    expect(result.topActivity).toBeNull();
+    expect(result.totalActiveMs).toBe(600_000); // falls back to durationMs
   });
 
   it("groups sessions into daily summaries sorted by date descending", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", startedAt: 1000 }),
-      baseSession({ id: "s2", date: "2024-01-03", startedAt: 3000 }),
-      baseSession({ id: "s3", date: "2024-01-02", startedAt: 2000 }),
+      makeSession({ id: "s1", startedAt: msFor("2024-01-01") }),
+      makeSession({ id: "s2", startedAt: msFor("2024-01-03") }),
+      makeSession({ id: "s3", startedAt: msFor("2024-01-02") }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
 
@@ -131,19 +93,19 @@ describe("computeWeeklySummary", () => {
 
   it("computes daily totals correctly", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", activeSeconds: 600, logged: true, timeSavedMinutes: 10 }),
-      baseSession({ id: "s2", date: "2024-01-01", activeSeconds: 300, logged: true, timeSavedMinutes: 5 }),
+      makeSession({ id: "s1", startedAt: msFor("2024-01-01"), durationMs: 600_000, activeMs: 500_000 }),
+      makeSession({ id: "s2", startedAt: msFor("2024-01-01", 14), durationMs: 300_000, activeMs: 250_000 }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
 
-    expect(result.dailySummaries[0].totalActiveMinutes).toBe(15);
-    expect(result.dailySummaries[0].totalTimeSavedMinutes).toBe(15);
+    expect(result.dailySummaries[0].totalDurationMs).toBe(900_000);
+    expect(result.dailySummaries[0].totalActiveMs).toBe(750_000);
   });
 
   it("sorts sessions within a day by startedAt ascending", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", startedAt: 3000 }),
-      baseSession({ id: "s2", date: "2024-01-01", startedAt: 1000 }),
+      makeSession({ id: "s1", startedAt: msFor("2024-01-01", 16) }),
+      makeSession({ id: "s2", startedAt: msFor("2024-01-01", 8) }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
 
@@ -151,24 +113,24 @@ describe("computeWeeklySummary", () => {
     expect(result.dailySummaries[0].sessions[1].id).toBe("s1");
   });
 
-  it("handles single session with 100% for tool and activity", () => {
+  it("handles single session with 100% for mostUsedTool", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", domain: "Perplexity", logged: true, activityType: ["Research"] }),
+      makeSession({ id: "s1", startedAt: msFor("2024-01-01"), domain: "perplexity.ai", durationMs: 300_000 }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
 
-    expect(result.mostUsedTool).toEqual({ name: "Perplexity", percentage: 100 });
-    expect(result.topActivity).toEqual({ name: "Research", percentage: 100 });
+    expect(result.mostUsedTool).toEqual({ name: "perplexity.ai", percentage: 100 });
   });
 
-  it("only counts timeSavedMinutes from logged sessions with non-null values", () => {
+  it("averageSessionMs rounds correctly", () => {
     const sessions = [
-      baseSession({ id: "s1", date: "2024-01-01", logged: true, timeSavedMinutes: 20 }),
-      baseSession({ id: "s2", date: "2024-01-01", logged: true, timeSavedMinutes: null }),
-      baseSession({ id: "s3", date: "2024-01-01", logged: false, timeSavedMinutes: 30 }),
+      makeSession({ id: "s1", startedAt: msFor("2024-01-01"), durationMs: 100_000 }),
+      makeSession({ id: "s2", startedAt: msFor("2024-01-02"), durationMs: 200_000 }),
+      makeSession({ id: "s3", startedAt: msFor("2024-01-03"), durationMs: 300_000 }),
     ];
     const result = computeWeeklySummary(sessions, "2024-01-01", "2024-01-07");
 
-    expect(result.totalTimeSavedMinutes).toBe(20);
+    // (100000 + 200000 + 300000) / 3 = 200000
+    expect(result.averageSessionMs).toBe(200_000);
   });
 });

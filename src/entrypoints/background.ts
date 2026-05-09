@@ -255,7 +255,7 @@ export default defineBackground(() => {
         await chrome.alarms.clear(HEARTBEAT_ALARM);
       }
 
-      await updateBadge(paused);
+      await updateBadge(paused, Boolean(tracker.getActiveSession()));
     } catch {
       activeTrackedTabId = null;
       await tracker.onTabFocused(null);
@@ -302,7 +302,7 @@ export default defineBackground(() => {
       await tracker.onIdle();
       await chrome.alarms.clear(HEARTBEAT_ALARM);
       const paused = await isPaused();
-      await updateBadge(paused);
+      await updateBadge(paused, false);
     } else if (newState === "active") {
       const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (activeTab?.id) await handleTabChange(activeTab.id);

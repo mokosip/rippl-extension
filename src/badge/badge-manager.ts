@@ -1,5 +1,3 @@
-import { db } from "../db/index";
-
 let bannerClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 export async function showExtensionBanner(
@@ -17,21 +15,16 @@ export async function showExtensionBanner(
   }, ttlMs);
 }
 
-export async function updateBadge(paused: boolean): Promise<void> {
-  if (paused) {
+/**
+ * Updates the extension badge.
+ * Shows an active-session indicator (green ●) when tracking is live,
+ * clears when paused or no session is active.
+ */
+export async function updateBadge(paused: boolean, isTracking = false): Promise<void> {
+  if (paused || !isTracking) {
     await chrome.action.setBadgeText({ text: "" });
     return;
   }
-
-  const now = Date.now();
-  const unlogged = await db.sessions
-    .filter(s => !s.logged && s.badgeExpiry !== null && s.badgeExpiry > now)
-    .count();
-
-  if (unlogged > 0) {
-    await chrome.action.setBadgeText({ text: String(unlogged) });
-    await chrome.action.setBadgeBackgroundColor({ color: "#B05F3F" }); // --terra
-  } else {
-    await chrome.action.setBadgeText({ text: "" });
-  }
+  await chrome.action.setBadgeText({ text: "●" });
+  await chrome.action.setBadgeBackgroundColor({ color: "#5C7A52" }); // --fern
 }
