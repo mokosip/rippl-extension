@@ -1,4 +1,4 @@
-import type { Session } from "../db/index";
+import type { ActivitySession } from "../db/index";
 
 export const DASHBOARD_LIVE = true;
 export const DASHBOARD_URL = "https://me.ripplup.app";
@@ -7,24 +7,22 @@ export interface WeeklySummary {
   startDate: string;
   endDate: string;
   totalSessions: number;
-  loggedSessions: number;
-  totalActiveMinutes: number;
-  totalTimeSavedMinutes: number;
+  totalDurationMs: number;
+  totalActiveMs: number;
   mostUsedTool: { name: string; percentage: number } | null;
-  topActivity: { name: string; percentage: number } | null;
-  averageSessionMinutes: number;
+  averageSessionMs: number;
   dailySummaries: DayEntry[];
 }
 
 export interface DayEntry {
   date: string;
-  totalTimeSavedMinutes: number;
-  totalActiveMinutes: number;
-  sessions: Session[];
+  totalDurationMs: number;
+  totalActiveMs: number;
+  sessions: ActivitySession[];
 }
 
 export function computeWeeklySummary(
-  sessions: Session[],
+  sessions: ActivitySession[],
   startDate: string,
   endDate: string,
 ): WeeklySummary {
@@ -33,94 +31,63 @@ export function computeWeeklySummary(
       startDate,
       endDate,
       totalSessions: 0,
-      loggedSessions: 0,
-      totalActiveMinutes: 0,
-      totalTimeSavedMinutes: 0,
+      totalDurationMs: 0,
+      totalActiveMs: 0,
       mostUsedTool: null,
-      topActivity: null,
-      averageSessionMinutes: 0,
+      averageSessionMs: 0,
       dailySummaries: [],
     };
   }
 
   const totalSessions = sessions.length;
-  const loggedSessions = sessions.filter((s) => s.logged).length;
-  const totalSeconds = sessions.reduce((sum, s) => sum + s.activeSeconds, 0);
-  const totalActiveMinutes = Math.round(totalSeconds / 60);
-  const totalTimeSavedMinutes = sessions
-    .filter((s) => s.logged && s.timeSavedMinutes !== null)
-    .reduce((sum, s) => sum + (s.timeSavedMinutes ?? 0), 0);
+  const totalDurationMs = sessions.reduce((sum, s) => sum + s.durationMs, 0);
+  const totalActiveMs = sessions.reduce(
+    (sum, s) => sum + (typeof s.activeMs === "number" ? s.activeMs : s.durationMs),
+    0,
+  );
+  const averageSessionMs = Math.round(totalDurationMs / totalSessions);
 
-  const domainSeconds = new Map<string, number>();
+  // Most-used tool by total duration
+  const domainMs = new Map<string, number>();
   for (const s of sessions) {
-    domainSeconds.set(
-      s.domain,
-      (domainSeconds.get(s.domain) ?? 0) + s.activeSeconds,
-    );
+    domainMs.set(s.domain, (domainMs.get(s.domain) ?? 0) + s.durationMs);
   }
 
   let mostUsedTool: { name: string; percentage: number } | null = null;
-  if (totalSeconds > 0) {
+  if (totalDurationMs > 0) {
     let maxDomain = "";
-    let maxSeconds = 0;
-    for (const [domain, seconds] of domainSeconds) {
-      if (seconds > maxSeconds) {
+    let maxMs = 0;
+    for (const [domain, ms] of domainMs) {
+      if (ms > maxMs) {
         maxDomain = domain;
-        maxSeconds = seconds;
+        maxMs = ms;
       }
     }
     mostUsedTool = {
       name: maxDomain,
-      percentage: Math.round((maxSeconds / totalSeconds) * 100),
+      percentage: Math.round((maxMs / totalDurationMs) * 100),
     };
   }
 
-  const loggedRatio = loggedSessions / totalSessions;
-  let topActivity: { name: string; percentage: number } | null = null;
-  const averageSessionMinutes = Math.round(totalActiveMinutes / totalSessions);
-
-  if (loggedRatio >= 0.5) {
-    const loggedWithActivity = sessions.filter(
-      (s) => s.logged && s.activityType !== null,
-    );
-    if (loggedWithActivity.length > 0) {
-      const activityCounts = new Map<string, number>();
-      for (const s of loggedWithActivity) {
-        for (const a of s.activityType!) {
-          activityCounts.set(a, (activityCounts.get(a) ?? 0) + 1);
-        }
-      }
-      let maxActivity = "";
-      let maxCount = 0;
-      for (const [activity, count] of activityCounts) {
-        if (count > maxCount) {
-          maxActivity = activity;
-          maxCount = count;
-        }
-      }
-      topActivity = {
-        name: maxActivity,
-        percentage: Math.round((maxCount / loggedWithActivity.length) * 100),
-      };
-    }
-  }
-
-  const dateMap = new Map<string, Session[]>();
+  // Group by date (UTC)
+  const dateMap = new Map<string, ActivitySession[]>();
   for (const s of sessions) {
-    if (!dateMap.has(s.date)) dateMap.set(s.date, []);
-    dateMap.get(s.date)!.push(s);
+    const date = new Date(s.startedAt).toISOString().slice(0, 10);
+    if (!dateMap.has(date)) dateMap.set(date, []);
+    dateMap.get(date)!.push(s);
   }
 
   const dailySummaries: DayEntry[] = [];
   for (const [date, daySessions] of dateMap) {
-    const daySeconds = daySessions.reduce((sum, s) => sum + s.activeSeconds, 0);
-    const dayTimeSaved = daySessions
-      .filter((s) => s.logged && s.timeSavedMinutes !== null)
-      .reduce((sum, s) => sum + (s.timeSavedMinutes ?? 0), 0);
+    const dayDurationMs = daySessions.reduce((sum, s) => sum + s.durationMs, 0);
+    const dayActiveMs = daySessions.reduce(
+      (sum, s) => sum + (typeof s.activeMs === "number" ? s.activeMs : s.durationMs),
+      0,
+    );
     dailySummaries.push({
       date,
-      totalActiveMinutes: Math.round(daySeconds / 60),
-      totalTimeSavedMinutes: dayTimeSaved,
+      totalDurationMs: dayDurationMs,
+      totalActiveMs: dayActiveMs,
       sessions: daySessions.sort((a, b) => a.startedAt - b.startedAt),
     });
   }
@@ -131,12 +98,10 @@ export function computeWeeklySummary(
     startDate,
     endDate,
     totalSessions,
-    loggedSessions,
-    totalActiveMinutes,
-    totalTimeSavedMinutes,
+    totalDurationMs,
+    totalActiveMs,
     mostUsedTool,
-    topActivity,
-    averageSessionMinutes,
+    averageSessionMs,
     dailySummaries,
   };
 }

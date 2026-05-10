@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { db } from "../../src/db/index";
-import type { Session, CustomDomain } from "../../src/db/index";
+import type { ActivitySession, FeedbackQueueItem, CustomDomain } from "../../src/db/index";
 import {
   isTrackingPaused,
   setTrackingPaused,
@@ -8,19 +8,29 @@ import {
   exportAllData,
 } from "../../src/privacy/privacy-controls";
 
-function makeSession(id: string): Session {
+function makeActivitySession(id: string): ActivitySession {
   return {
     id,
     domain: "example.com",
     startedAt: 1_700_000_000_000,
     endedAt: 1_700_000_060_000,
-    activeSeconds: 60,
-    date: "2024-01-01",
-    activityType: null,
-    estimatedWithoutMinutes: null,
-    timeSavedMinutes: null,
-    logged: false,
-    badgeExpiry: null,
+    durationMs: 60_000,
+    activeMs: 50_000,
+    metrics: { interaction_count: 0, copy_events: 0, paste_events: 0 },
+    syncStatus: "local",
+    createdAt: 1_700_000_060_000,
+  };
+}
+
+function makeFeedbackItem(id: string): FeedbackQueueItem {
+  return {
+    id,
+    sessionId: "sess-1",
+    question: "What were you working on?",
+    options: [{ label: "Coding", value: "coding" }],
+    expiresAt: 1_700_000_060_000 + 86_400_000,
+    status: "pending",
+    createdAt: 1_700_000_060_000,
   };
 }
 
@@ -33,7 +43,8 @@ function makeCustomDomain(hostname: string): CustomDomain {
 }
 
 afterEach(async () => {
-  await db.sessions.clear();
+  await db.activitySessions.clear();
+  await db.feedbackQueue.clear();
   await db.config.clear();
   await db.customDomains.clear();
 });
@@ -80,14 +91,16 @@ describe("setTrackingPaused", () => {
 });
 
 describe("deleteAllData", () => {
-  it("clears all DB tables (sessions, config, customDomains)", async () => {
-    await db.sessions.bulkPut([makeSession("s1"), makeSession("s2")]);
+  it("clears activitySessions, feedbackQueue, config, and customDomains", async () => {
+    await db.activitySessions.bulkPut([makeActivitySession("s1"), makeActivitySession("s2")]);
+    await db.feedbackQueue.bulkPut([makeFeedbackItem("f1")]);
     await db.config.put({ key: "trackingPaused", value: true });
     await db.customDomains.put(makeCustomDomain("my-tool.com"));
 
     await deleteAllData();
 
-    expect(await db.sessions.count()).toBe(0);
+    expect(await db.activitySessions.count()).toBe(0);
+    expect(await db.feedbackQueue.count()).toBe(0);
     expect(await db.config.count()).toBe(0);
     expect(await db.customDomains.count()).toBe(0);
   });
@@ -98,19 +111,23 @@ describe("deleteAllData", () => {
 });
 
 describe("exportAllData", () => {
-  it("returns all data from all tables", async () => {
-    const sessions = [makeSession("s1"), makeSession("s2")];
+  it("returns activitySessions, feedbackQueue, config, and customDomains", async () => {
+    const sessions = [makeActivitySession("s1"), makeActivitySession("s2")];
+    const feedback = [makeFeedbackItem("f1")];
     const configEntry = { key: "trackingPaused", value: true };
     const domain = makeCustomDomain("my-tool.com");
 
-    await db.sessions.bulkPut(sessions);
+    await db.activitySessions.bulkPut(sessions);
+    await db.feedbackQueue.bulkPut(feedback);
     await db.config.put(configEntry);
     await db.customDomains.put(domain);
 
     const result = await exportAllData();
 
-    expect(result.sessions).toHaveLength(2);
-    expect(result.sessions).toEqual(expect.arrayContaining(sessions));
+    expect(result.activitySessions).toHaveLength(2);
+    expect(result.activitySessions).toEqual(expect.arrayContaining(sessions));
+    expect(result.feedbackQueue).toHaveLength(1);
+    expect(result.feedbackQueue[0].id).toBe("f1");
     expect(result.config).toHaveLength(1);
     expect(result.config[0]).toEqual(configEntry);
     expect(result.customDomains).toHaveLength(1);
@@ -119,7 +136,8 @@ describe("exportAllData", () => {
 
   it("returns empty arrays when tables are empty", async () => {
     const result = await exportAllData();
-    expect(result.sessions).toEqual([]);
+    expect(result.activitySessions).toEqual([]);
+    expect(result.feedbackQueue).toEqual([]);
     expect(result.config).toEqual([]);
     expect(result.customDomains).toEqual([]);
   });

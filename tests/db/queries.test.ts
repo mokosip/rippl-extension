@@ -1,76 +1,83 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { db } from "../../src/db/index";
-import { logSession, skipSession } from "../../src/db/queries";
-import type { Session } from "../../src/db/index";
+import { db, type ActivitySession } from "../../src/db/index";
+import { getActivitySessionsInRange, pruneOldSessions } from "../../src/db/queries";
 
-const makeSession = (overrides: Partial<Session> & { id: string }): Session => ({
-  domain: "claude.ai",
-  date: "2024-01-01",
-  startedAt: 1000,
-  endedAt: 2000,
-  activeSeconds: 600,
-  activityType: null,
-  estimatedWithoutMinutes: null,
-  timeSavedMinutes: null,
-  logged: false,
-  badgeExpiry: null,
-  syncStatus: "local",
-  ...overrides,
-});
+function makeActivitySession(overrides: Partial<ActivitySession> & { id: string; startedAt: number }): ActivitySession {
+  return {
+    domain: "claude.ai",
+    endedAt: overrides.startedAt + 60_000,
+    durationMs: 60_000,
+    activeMs: 50_000,
+    metrics: { interaction_count: 0, copy_events: 0, paste_events: 0 },
+    syncStatus: "local",
+    createdAt: overrides.startedAt + 60_000,
+    ...overrides,
+  };
+}
 
 afterEach(async () => {
-  await db.sessions.clear();
+  await db.activitySessions.clear();
 });
 
-describe("logSession", () => {
-  it("stores activityType as string array", async () => {
-    await db.sessions.put(makeSession({ id: "s1" }));
-    await logSession("s1", ["Code"], 15);
+describe("getActivitySessionsInRange", () => {
+  it("returns sessions within the date range", async () => {
+    // 2024-01-02T12:00:00Z
+    const inRange = makeActivitySession({ id: "s1", startedAt: Date.parse("2024-01-02T12:00:00Z") });
+    // 2024-01-04T06:00:00Z
+    const inRange2 = makeActivitySession({ id: "s2", startedAt: Date.parse("2024-01-04T06:00:00Z") });
+    // 2023-12-31 — before range
+    const before = makeActivitySession({ id: "s3", startedAt: Date.parse("2023-12-31T12:00:00Z") });
+    // 2024-01-08 — after range
+    const after = makeActivitySession({ id: "s4", startedAt: Date.parse("2024-01-08T12:00:00Z") });
 
-    const session = await db.sessions.get("s1");
-    expect(session!.activityType).toEqual(["Code"]);
-    expect(session!.logged).toBe(true);
+    await db.activitySessions.bulkPut([inRange, inRange2, before, after]);
+
+    const result = await getActivitySessionsInRange("2024-01-01", "2024-01-07");
+
+    expect(result.map(s => s.id).sort()).toEqual(["s1", "s2"]);
   });
 
-  it("stores multiple activity types", async () => {
-    await db.sessions.put(makeSession({ id: "s2" }));
-    await logSession("s2", ["Code", "Research"], 30);
+  it("returns empty array when no sessions in range", async () => {
+    await db.activitySessions.put(
+      makeActivitySession({ id: "s1", startedAt: Date.parse("2024-01-10T12:00:00Z") })
+    );
 
-    const session = await db.sessions.get("s2");
-    expect(session!.activityType).toEqual(["Code", "Research"]);
+    const result = await getActivitySessionsInRange("2024-01-01", "2024-01-07");
+    expect(result).toHaveLength(0);
   });
 
-  it("computes timeSavedMinutes correctly", async () => {
-    await db.sessions.put(makeSession({ id: "s3", activeSeconds: 300 }));
-    await logSession("s3", ["Writing"], 15);
+  it("includes sessions on boundary dates", async () => {
+    // start of startDate (UTC midnight)
+    const atStart = makeActivitySession({ id: "s-start", startedAt: Date.parse("2024-01-01T00:00:00Z") });
+    // end of endDate (UTC 23:59:59.999)
+    const atEnd = makeActivitySession({ id: "s-end", startedAt: Date.parse("2024-01-07T23:59:59.000Z") });
 
-    const session = await db.sessions.get("s3");
-    expect(session!.estimatedWithoutMinutes).toBe(15);
-    expect(session!.timeSavedMinutes).toBe(10);
-  });
+    await db.activitySessions.bulkPut([atStart, atEnd]);
 
-  it("clamps timeSavedMinutes to zero when estimate is less than actual", async () => {
-    await db.sessions.put(makeSession({ id: "s4", activeSeconds: 600 }));
-    await logSession("s4", ["Code"], 5);
-
-    const session = await db.sessions.get("s4");
-    expect(session!.timeSavedMinutes).toBe(0);
-  });
-
-  it("does nothing for non-existent session", async () => {
-    await logSession("nonexistent", ["Code"], 10);
-    const count = await db.sessions.count();
-    expect(count).toBe(0);
+    const result = await getActivitySessionsInRange("2024-01-01", "2024-01-07");
+    expect(result.map(s => s.id).sort()).toEqual(["s-end", "s-start"]);
   });
 });
 
-describe("skipSession", () => {
-  it("marks session as logged without setting activityType", async () => {
-    await db.sessions.put(makeSession({ id: "s5" }));
-    await skipSession("s5");
+describe("pruneOldSessions", () => {
+  it("deletes activitySessions older than 90 days", async () => {
+    const now = new Date("2024-04-10T00:00:00Z");
+    const cutoff = new Date("2024-01-10T00:00:00Z"); // 90 days before
 
-    const session = await db.sessions.get("s5");
-    expect(session!.logged).toBe(true);
-    expect(session!.activityType).toBeNull();
+    // 89 days old — should survive
+    const recent = makeActivitySession({ id: "s-recent", startedAt: new Date("2024-01-11T00:00:00Z").getTime() });
+    // 91 days old — should be pruned
+    const old = makeActivitySession({ id: "s-old", startedAt: new Date("2024-01-09T00:00:00Z").getTime() });
+
+    await db.activitySessions.bulkPut([recent, old]);
+
+    await pruneOldSessions(now);
+
+    const remaining = await db.activitySessions.toArray();
+    expect(remaining.map(s => s.id)).toEqual(["s-recent"]);
+  });
+
+  it("is a no-op when table is empty", async () => {
+    await expect(pruneOldSessions()).resolves.toBeUndefined();
   });
 });

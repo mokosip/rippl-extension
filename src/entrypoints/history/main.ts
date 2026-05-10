@@ -1,4 +1,4 @@
-import { getSessionsInRange } from "@/db/queries";
+import { getActivitySessionsInRange } from "@/db/queries";
 import { isTrackingPaused, setTrackingPaused } from "@/privacy/privacy-controls";
 import {
   computeWeeklySummary,
@@ -20,17 +20,14 @@ const bridgeCta = document.getElementById("bridge-cta")! as HTMLAnchorElement;
 const emptyState = document.getElementById("empty-state")!;
 const dayList = document.getElementById("day-list")!;
 
-function formatMinutes(minutes: number): string {
-  if (minutes < 60) return `${minutes} min`;
-  const hrs = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  if (mins === 0) return `${hrs}hr`;
-  return `${hrs}hr ${mins}min`;
-}
-
-function formatDuration(seconds: number): string {
-  const mins = Math.round(seconds / 60);
-  return mins < 1 ? "<1 min" : `${mins} min`;
+function formatMs(ms: number): string {
+  const mins = Math.round(ms / 60_000);
+  if (mins < 1) return "<1 min";
+  if (mins < 60) return `${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  if (rem === 0) return `${hrs}hr`;
+  return `${hrs}hr ${rem}min`;
 }
 
 function formatTime(timestamp: number): string {
@@ -82,7 +79,7 @@ async function render(): Promise<void> {
   }
 
   const { startDate, endDate } = getDateRange();
-  const sessions = await getSessionsInRange(startDate, endDate);
+  const sessions = await getActivitySessionsInRange(startDate, endDate);
   const summary = computeWeeklySummary(sessions, startDate, endDate);
 
   if (summary.totalSessions === 0) {
@@ -92,21 +89,15 @@ async function render(): Promise<void> {
 
   insightsHero.classList.remove("hidden");
 
-  const hasTimeSaved = summary.totalTimeSavedMinutes > 0;
-
-  if (hasTimeSaved) {
-    heroNumber.textContent = `${formatMinutes(summary.totalTimeSavedMinutes)} saved`;
-    heroSeed.textContent = `"${humanScaleComparison(summary.totalTimeSavedMinutes)}"`;
-    heroQualifier.textContent = `from ${summary.loggedSessions} of ${summary.totalSessions} sessions`;
-  } else {
-    heroNumber.textContent = `${formatMinutes(summary.totalActiveMinutes)} on AI tools`;
-    heroSeed.classList.add("hidden");
-    heroQualifier.textContent = `${summary.totalSessions} session${summary.totalSessions !== 1 ? "s" : ""} this week`;
-  }
+  const activeMinutes = Math.round(summary.totalActiveMs / 60_000);
+  heroNumber.textContent = `${formatMs(summary.totalActiveMs)} on AI tools`;
+  heroSeed.textContent = activeMinutes >= 15
+    ? `"${humanScaleComparison(activeMinutes)}"`
+    : "";
+  if (!heroSeed.textContent) heroSeed.classList.add("hidden");
+  heroQualifier.textContent = `${summary.totalSessions} session${summary.totalSessions !== 1 ? "s" : ""} this week`;
 
   // Stat cards
-  const loggedRatio = summary.loggedSessions / summary.totalSessions;
-
   if (summary.mostUsedTool) {
     const card = document.createElement("div");
     card.className = "stat-card";
@@ -118,57 +109,29 @@ async function render(): Promise<void> {
     statCards.appendChild(card);
   }
 
-  if (loggedRatio >= 0.5) {
-    const card = document.createElement("div");
-    card.className = "stat-card";
-    if (summary.topActivity) {
-      card.innerHTML = `
-        <div class="stat-card-label">Top activity</div>
-        <div class="stat-card-value">${escapeHtml(summary.topActivity.name)}</div>
-        <div class="stat-card-pct">(${summary.topActivity.percentage}%)</div>
-      `;
-    } else {
-      card.innerHTML = `
-        <div class="stat-card-label">Top activity</div>
-        <div class="stat-card-value">&mdash;</div>
-      `;
-    }
-    statCards.appendChild(card);
-  } else {
+  {
+    const avgMs = summary.averageSessionMs;
     const card = document.createElement("div");
     card.className = "stat-card";
     card.innerHTML = `
       <div class="stat-card-label">Avg session</div>
-      <div class="stat-card-value">${formatMinutes(summary.averageSessionMinutes)}</div>
+      <div class="stat-card-value">${formatMs(avgMs)}</div>
     `;
     statCards.appendChild(card);
   }
 
-  // Bridge
-  if (hasTimeSaved) {
+  // Bridge — always shown when sessions exist and dashboard is live
+  if (DASHBOARD_LIVE) {
     bridgeEl.classList.remove("hidden");
-    if (DASHBOARD_LIVE) {
-      bridgeText.textContent = `You freed ${formatMinutes(summary.totalTimeSavedMinutes)} this week. What could that become?`;
-      bridgeCta.textContent = "Explore on Dashboard →";
-      bridgeCta.href = DASHBOARD_URL;
-      bridgeCta.classList.remove("hidden");
-    } else {
-      bridgeText.textContent = `You freed ${formatMinutes(summary.totalTimeSavedMinutes)} this week.`;
-    }
+    bridgeText.textContent = `You spent ${formatMs(summary.totalActiveMs)} on AI tools this week.`;
+    bridgeCta.textContent = "Explore on Dashboard →";
+    bridgeCta.href = DASHBOARD_URL;
+    bridgeCta.classList.remove("hidden");
   }
 
   // Day-by-day list
   for (const day of summary.dailySummaries) {
     const dateLabel = formatDateLabel(day.date);
-    const loggedInDay = day.sessions.filter(
-      (s) => s.logged && s.timeSavedMinutes !== null && s.timeSavedMinutes > 0,
-    );
-    const dayHasTimeSaved = loggedInDay.length > 0 && day.totalTimeSavedMinutes > 0;
-
-    const timeMetric = dayHasTimeSaved
-      ? `${formatMinutes(day.totalTimeSavedMinutes)} saved`
-      : `${formatMinutes(day.totalActiveMinutes)} on AI`;
-
     const count = day.sessions.length;
 
     const group = document.createElement("div");
@@ -187,7 +150,7 @@ async function render(): Promise<void> {
 
     const meta = document.createElement("span");
     meta.className = "day-meta";
-    meta.textContent = `${timeMetric} (${count} session${count !== 1 ? "s" : ""})`;
+    meta.textContent = `${formatMs(day.totalActiveMs)} active (${count} session${count !== 1 ? "s" : ""})`;
 
     header.appendChild(chevron);
     header.appendChild(label);
@@ -196,11 +159,7 @@ async function render(): Promise<void> {
     const sessionsEl = document.createElement("div");
     sessionsEl.className = "day-sessions hidden";
 
-    const visibleSessions = day.sessions.filter(
-      (s) => !s.logged || s.activityType !== null || s.timeSavedMinutes !== null,
-    );
-
-    for (const s of visibleSessions) {
+    for (const s of day.sessions) {
       const row = document.createElement("div");
       row.className = "session-row";
 
@@ -210,22 +169,12 @@ async function render(): Promise<void> {
 
       const durationEl = document.createElement("span");
       durationEl.className = "session-duration";
-      durationEl.textContent = formatDuration(s.activeSeconds);
+      durationEl.textContent = formatMs(s.durationMs);
 
-      const savedEl = document.createElement("span");
-      savedEl.className = "session-saved";
-      if (s.timeSavedMinutes !== null && s.timeSavedMinutes > 0) {
-        savedEl.textContent = `saved ${formatMinutes(s.timeSavedMinutes)}`;
-      }
-
-      const activityEl = document.createElement("span");
-      if (!s.logged) {
-        activityEl.className = "session-activity unlogged";
-        activityEl.textContent = "Not logged";
-      } else {
-        activityEl.className = "session-activity";
-        activityEl.textContent = s.activityType?.join(", ") ?? null;
-      }
+      const activeEl = document.createElement("span");
+      activeEl.className = "session-active";
+      const activeMs = typeof s.activeMs === "number" ? s.activeMs : s.durationMs;
+      activeEl.textContent = `${formatMs(activeMs)} active`;
 
       const timeEl = document.createElement("span");
       timeEl.className = "session-time";
@@ -233,8 +182,7 @@ async function render(): Promise<void> {
 
       row.appendChild(domainEl);
       row.appendChild(durationEl);
-      row.appendChild(savedEl);
-      row.appendChild(activityEl);
+      row.appendChild(activeEl);
       row.appendChild(timeEl);
       sessionsEl.appendChild(row);
     }

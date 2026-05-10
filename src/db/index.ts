@@ -1,18 +1,29 @@
 import Dexie, { type EntityTable } from "dexie";
 
-export interface Session {
+export interface ActivitySession {
   id: string;
   domain: string;
   startedAt: number;
   endedAt: number;
-  activeSeconds: number;
-  date: string; // "YYYY-MM-DD"
-  activityType: string[] | null;
-  estimatedWithoutMinutes: number | null;
-  timeSavedMinutes: number | null;
-  logged: boolean;
-  badgeExpiry: number | null; // timestamp — 24h after session end
-  syncStatus: "pending" | "synced" | "local"; // local = no dashboard linked
+  durationMs: number;
+  activeMs?: number;
+  metrics: {
+    interaction_count: number;
+    copy_events: number;
+    paste_events: number;
+  };
+  syncStatus: "pending" | "synced" | "local";
+  createdAt: number;
+}
+
+export interface FeedbackQueueItem {
+  id: string;
+  sessionId: string;
+  question: string;
+  options: Array<{ label: string; value: string }>;
+  expiresAt: number;
+  status: "pending" | "answered" | "expired";
+  createdAt: number;
 }
 
 export interface Config {
@@ -26,26 +37,38 @@ export interface CustomDomain {
   addedAt: number;
 }
 
-const db = new Dexie("rippl") as Dexie & {
-  sessions: EntityTable<Session, "id">;
-  config: EntityTable<Config, "key">;
-  customDomains: EntityTable<CustomDomain, "hostname">;
-};
+export function createRipplDb(name = "rippl") {
+  const database = new Dexie(name) as Dexie & {
+    activitySessions: EntityTable<ActivitySession, "id">;
+    feedbackQueue: EntityTable<FeedbackQueueItem, "id">;
+    config: EntityTable<Config, "key">;
+    customDomains: EntityTable<CustomDomain, "hostname">;
+  };
 
-db.version(1).stores({
-  sessions: "id, domain, date, logged, badgeExpiry",
-  config: "key",
-  customDomains: "hostname",
-});
+  // v3 kept for users upgrading from pre-pivot schemas.
+  database
+    .version(3)
+    .stores({
+      sessions: "id, domain, date, logged, badgeExpiry, syncStatus",
+      activitySessions: "id, domain, startedAt, endedAt, syncStatus, createdAt",
+      feedbackQueue: "id, sessionId, status, expiresAt, createdAt",
+      config: "key",
+      customDomains: "hostname",
+    })
+    .upgrade(async tx => {
+      await tx.table("sessions").clear();
+    });
 
-db.version(2).stores({
-  sessions: "id, domain, date, logged, badgeExpiry, syncStatus",
-  config: "key",
-  customDomains: "hostname",
-}).upgrade(tx => {
-  return tx.table("sessions").toCollection().modify(session => {
-    session.syncStatus = "local";
+  // v4 removes legacy self-report table completely.
+  database.version(4).stores({
+    sessions: null,
+    activitySessions: "id, domain, startedAt, endedAt, syncStatus, createdAt",
+    feedbackQueue: "id, sessionId, status, expiresAt, createdAt",
+    config: "key",
+    customDomains: "hostname",
   });
-});
 
-export { db };
+  return database;
+}
+
+export const db = createRipplDb();

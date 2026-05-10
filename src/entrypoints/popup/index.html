@@ -8,85 +8,51 @@
 </head>
 <body>
   <div id="app">
+    <header class="popup-header">
+      <span class="brand-mark"><svg class="brand-icon" width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="3.5" fill="#5C7A52"/><circle cx="16" cy="16" r="8.7" stroke="#5C7A52" stroke-width="2.8" opacity=".65"/><circle cx="16" cy="16" r="14" stroke="#5C7A52" stroke-width="2.2" opacity=".4"/></svg> rippl</span>
+      <div class="header-actions">
+        <button class="btn-icon" id="btn-history" title="Weekly history"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="10" width="3" height="4" rx="0.5" fill="currentColor" opacity="0.5"/><rect x="6.5" y="6" width="3" height="8" rx="0.5" fill="currentColor" opacity="0.7"/><rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor"/></svg></button>
+        <button class="btn-icon" id="btn-settings" title="Settings">&#x2699;</button>
+      </div>
+    </header>
 
-    <!-- Single session micro-prompt -->
-    <div id="state-prompt" class="state hidden">
-      <div class="prompt-topbar">
-        <button class="btn-back" id="btn-back" type="button">&larr; Back</button>
-        <span class="prompt-counter hidden" id="prompt-counter"></span>
-      </div>
-      <p class="prompt-headline" id="prompt-headline"></p>
-
-      <label class="section-label">What were you doing?</label>
-      <div class="pill-group" id="activity-pills">
-        <!-- Populated dynamically from defaults + custom activities -->
-      </div>
-
-      <label class="section-label">Without AI, this would've taken…</label>
-      <div class="pill-group" id="time-pills">
-        <button class="pill" data-value="same">~same</button>
-        <button class="pill" data-value="5">5m</button>
-        <button class="pill" data-value="15">15m</button>
-        <button class="pill" data-value="30">30m</button>
-        <button class="pill" data-value="60">1hr</button>
-        <button class="pill" data-value="120">2hr+</button>
-      </div>
-
-      <div class="actions">
-        <button class="btn-skip" id="btn-skip">Skip</button>
-      </div>
-    </div>
-
-    <!-- Multi-session list -->
-    <div id="state-session-list" class="state hidden">
-      <div class="list-header">
-        <p class="list-headline" id="list-headline"></p>
-        <button class="btn-sort" id="btn-sort" type="button">Newest first</button>
-      </div>
-      <div id="session-list" class="session-list"></div>
-      <div class="actions list-actions">
-        <button class="btn-primary" id="btn-merge" disabled>Merge selected</button>
-        <button class="btn-primary" id="btn-log-each">Log each</button>
-      </div>
-      <div class="actions">
-        <button class="btn-skip" id="btn-skip-all">Skip all</button>
-      </div>
-    </div>
-
-    <!-- Daily summary -->
-    <div id="state-summary" class="state hidden">
-      <div class="summary-header">
-        <span class="brand-mark"><svg class="brand-icon" width="18" height="18" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="16" r="3.5" fill="#5C7A52"/><circle cx="16" cy="16" r="8.7" stroke="#5C7A52" stroke-width="2.8" opacity=".65"/><circle cx="16" cy="16" r="14" stroke="#5C7A52" stroke-width="2.2" opacity=".4"/></svg> rippl</span>
-        <div class="header-actions">
-          <button class="btn-icon" id="btn-history" title="Weekly history"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="10" width="3" height="4" rx="0.5" fill="currentColor" opacity="0.5"/><rect x="6.5" y="6" width="3" height="8" rx="0.5" fill="currentColor" opacity="0.7"/><rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor"/></svg></button>
-          <button class="btn-icon" id="btn-settings" title="Settings">&#x2699;</button>
-        </div>
-      </div>
-      <div class="summary-date-row">
-        <p class="summary-date" id="summary-date"></p>
-        <button class="btn-icon" id="btn-pause" title="Pause tracking">&#x23F8;</button>
-      </div>
-      <div class="hero" id="hero"></div>
-      <div class="seed" id="seed"></div>
-      <hr class="divider">
-      <div class="stats" id="stats"></div>
-      <div class="weekly-teaser hidden" id="weekly-teaser"></div>
-      <!-- Paused state -->
-      <div class="paused-state hidden" id="paused-state">
-        <p>Tracking paused.</p>
-        <button class="btn-primary" id="btn-resume">Resume</button>
-      </div>
-      <!-- Empty state -->
-      <div class="empty-state hidden" id="empty-state">
-        <p>Quiet day. No AI tools detected yet.</p>
-      </div>
-    </div>
-
-    <!-- Loading state -->
     <div id="state-loading" class="state">
       <p class="loading-text">Loading&hellip;</p>
     </div>
 
+    <div id="state-feedback" class="state hidden">
+      <p class="feedback-question" id="feedback-question"></p>
+      <div class="feedback-options" id="feedback-options"></div>
+      <p class="feedback-error hidden" id="feedback-error"></p>
+    </div>
+
+    <div id="state-status" class="state hidden">
+      <div class="status-date-row">
+        <p class="status-date" id="status-date"></p>
+        <button class="btn-toggle" id="btn-toggle-pause" type="button"></button>
+      </div>
+
+      <p class="status-line hidden" id="status-line"></p>
+
+      <div class="status-stats hidden" id="status-stats">
+        <div class="stat-cell">
+          <span class="stat-label">Sessions</span>
+          <span class="stat-value" id="status-session-count"></span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-label">Duration</span>
+          <span class="stat-value" id="status-duration"></span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-label">Active</span>
+          <span class="stat-value" id="status-active"></span>
+        </div>
+      </div>
+
+      <div class="empty-state hidden" id="status-empty">
+        <p>Quiet day. No AI tools detected yet.</p>
+      </div>
+    </div>
   </div>
   <script type="module" src="./main.ts"></script>
 </body>

@@ -1,8 +1,51 @@
-import { db, type Session } from "@/db/index";
+import { db, type ActivitySession } from "../db/index";
+import { queueFeedback } from "../feedback/feedback-queue";
+import {
+  buildActivitySessionPayload,
+  parseFeedbackRequest,
+} from "../ingestion/activity-session-payload";
 
 const DASHBOARD_URL = import.meta.env.VITE_DASHBOARD_URL ?? "https://me.ripplup.app";
+const INGEST_ENDPOINT = "/v1/activity-sessions";
+const FEEDBACK_ENDPOINT = (id: string) => `${INGEST_ENDPOINT}/${id}/feedback`;
 const SYNC_ALARM = "rippl-dashboard-sync";
 const SYNC_INTERVAL_MINUTES = 60;
+
+export type SyncSummary = {
+  attempted: number;
+  synced: number;
+  failed: number;
+  authError: boolean;
+  skipped: "no_token" | "no_pending" | null;
+};
+
+function getExtensionVersion(): string {
+  try {
+    return chrome.runtime.getManifest?.().version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function getBrowserVersion(): string {
+  const userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  const chromeVersion = userAgent.match(/Chrome\/([\d.]+)/)?.[1];
+  return chromeVersion ?? "unknown";
+}
+
+function toIngestionPayload(session: ActivitySession) {
+  return buildActivitySessionPayload({
+    id: session.id,
+    domain: session.domain,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    durationMs: session.durationMs,
+    activeMs: session.activeMs,
+    metrics: session.metrics,
+    extensionVersion: getExtensionVersion(),
+    sourceVersion: getBrowserVersion(),
+  });
+}
 
 export async function getAuthToken(): Promise<string | null> {
   const config = await db.config.get("dashboardToken");
@@ -11,15 +54,16 @@ export async function getAuthToken(): Promise<string | null> {
 
 export async function validateToken(token: string): Promise<boolean> {
   try {
-    const res = await fetch(`${DASHBOARD_URL}/api/sync/sessions`, {
+    const res = await fetch(`${DASHBOARD_URL}${INGEST_ENDPOINT}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ sessions: [] }),
+      body: JSON.stringify({}),
     });
-    return res.ok;
+
+    return res.status !== 401 && res.status !== 403;
   } catch {
     return false;
   }
@@ -27,7 +71,7 @@ export async function validateToken(token: string): Promise<boolean> {
 
 export async function setAuthToken(token: string): Promise<void> {
   await db.config.put({ key: "dashboardToken", value: token });
-  await db.sessions.where("syncStatus").equals("local").modify({ syncStatus: "pending" });
+  await db.activitySessions.where("syncStatus").equals("local").modify({ syncStatus: "pending" });
   console.log("[rippl-sync] token stored, marked local sessions as pending");
 }
 
@@ -36,61 +80,128 @@ export async function clearAuthToken(): Promise<void> {
   console.log("[rippl-sync] token cleared");
 }
 
-async function getPendingSessions(): Promise<Session[]> {
-  const pending = await db.sessions.where("syncStatus").equals("pending").toArray();
-  return pending.filter(s => s.logged);
+async function getPendingSessions(): Promise<ActivitySession[]> {
+  return db.activitySessions.where("syncStatus").equals("pending").sortBy("createdAt");
 }
 
-export async function syncSessions(): Promise<void> {
+async function queueFeedbackFromIngestionResponse(response: Response): Promise<void> {
+  let responseBody: unknown;
+
+  try {
+    responseBody = await response.json();
+  } catch {
+    return;
+  }
+
+  const parsed = parseFeedbackRequest(responseBody as Parameters<typeof parseFeedbackRequest>[0]);
+  if (!parsed) return;
+
+  const backendSessionId =
+    typeof responseBody === "object" && responseBody !== null
+      ? (responseBody as { session_id?: unknown }).session_id
+      : undefined;
+
+  if (typeof backendSessionId !== "string" || backendSessionId.trim() === "") {
+    console.warn("[rippl-sync] missing session_id in feedback response payload");
+    return;
+  }
+
+  await queueFeedback({
+    sessionId: backendSessionId,
+    question: parsed.question,
+    options: parsed.options,
+  });
+}
+
+export async function syncSessions(): Promise<SyncSummary> {
   const token = await getAuthToken();
-  if (!token) return;
+  if (!token) {
+    return { attempted: 0, synced: 0, failed: 0, authError: false, skipped: "no_token" };
+  }
 
   const pending = await getPendingSessions();
-  if (pending.length === 0) return;
+  if (pending.length === 0) {
+    return { attempted: 0, synced: 0, failed: 0, authError: false, skipped: "no_pending" };
+  }
 
   console.log("[rippl-sync] syncing", pending.length, "sessions");
 
-  const payload = pending.map(s => ({
-    id: s.id,
-    domain: s.domain,
-    startedAt: s.startedAt,
-    endedAt: s.endedAt,
-    activeSeconds: s.activeSeconds,
-    date: s.date,
-    activityType: s.activityType,
-    estimatedWithoutMinutes: s.estimatedWithoutMinutes,
-    timeSavedMinutes: s.timeSavedMinutes,
-    logged: s.logged,
-  }));
+  const summary: SyncSummary = {
+    attempted: pending.length,
+    synced: 0,
+    failed: 0,
+    authError: false,
+    skipped: null,
+  };
+
+  for (const session of pending) {
+    try {
+      const res = await fetch(`${DASHBOARD_URL}${INGEST_ENDPOINT}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(toIngestionPayload(session)),
+      });
+
+      if (res.status === 401) {
+        console.warn("[rippl-sync] 401 — token invalid, clearing");
+        await clearAuthToken();
+        await db.activitySessions.where("syncStatus").notEqual("synced").modify({ syncStatus: "local" });
+        summary.authError = true;
+        return summary;
+      }
+
+      if (!res.ok) {
+        console.error("[rippl-sync] sync failed", res.status, session.id);
+        summary.failed += 1;
+        continue;
+      }
+
+      await queueFeedbackFromIngestionResponse(res);
+      await db.activitySessions.update(session.id, { syncStatus: "synced" });
+      summary.synced += 1;
+      console.log("[rippl-sync] synced session", session.id);
+    } catch (e) {
+      console.error("[rippl-sync] network error", e);
+      summary.failed += 1;
+    }
+  }
+
+  return summary;
+}
+
+export async function submitSessionFeedback(
+  sessionId: string,
+  value: string,
+  type = "task_type",
+): Promise<boolean> {
+  const token = await getAuthToken();
+  if (!token) return false;
 
   try {
-    const res = await fetch(`${DASHBOARD_URL}/api/sync/sessions`, {
+    const res = await fetch(`${DASHBOARD_URL}${FEEDBACK_ENDPOINT(sessionId)}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ sessions: payload }),
+      body: JSON.stringify({ type, value }),
     });
 
     if (res.status === 401) {
-      console.warn("[rippl-sync] 401 — token invalid, clearing");
       await clearAuthToken();
-      return;
+      return false;
     }
 
-    if (!res.ok) {
-      console.error("[rippl-sync] sync failed", res.status);
-      return;
+    if (res.status === 404) {
+      return true;
     }
 
-    const result = await res.json();
-    console.log("[rippl-sync] synced:", result.accepted, "accepted,", result.duplicates, "dupes");
-
-    const ids = pending.map(s => s.id);
-    await db.sessions.where("id").anyOf(ids).modify({ syncStatus: "synced" });
-  } catch (e) {
-    console.error("[rippl-sync] network error", e);
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

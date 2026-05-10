@@ -3,30 +3,38 @@ import { db } from "../../src/db/index";
 import { SessionTracker } from "../../src/tracking/session-tracker";
 
 beforeEach(async () => {
-  await db.sessions.clear();
+  await db.activitySessions.clear();
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
 describe("SessionTracker", () => {
-  it("starts a session for an AI domain and stores it in Dexie after ending", async () => {
+  it("stores durationMs and metrics defaults on session end", async () => {
     const tracker = new SessionTracker();
     const startTime = 1_000_000_000_000;
+    const endTime = startTime + 30_000;
+
     vi.spyOn(Date, "now").mockReturnValue(startTime);
-
     await tracker.onTabFocused("claude.ai");
-    expect(tracker.getActiveSession()).not.toBeNull();
-    expect(tracker.getActiveSession()?.domain).toBe("claude.ai");
 
-    // Advance time so session exceeds minimum
-    vi.spyOn(Date, "now").mockReturnValue(startTime + 15_000);
+    vi.spyOn(Date, "now").mockReturnValue(endTime);
     await tracker.onTabFocused(null);
 
-    const sessions = await db.sessions.toArray();
+    const sessions = await db.activitySessions.toArray();
     expect(sessions).toHaveLength(1);
-    expect(sessions[0].domain).toBe("claude.ai");
+
+    const saved = sessions[0];
+    expect(saved.domain).toBe("claude.ai");
+    expect(saved.startedAt).toBe(startTime);
+    expect(saved.endedAt).toBe(endTime);
+    expect(saved.durationMs).toBe(30_000);
+    expect(saved.activeMs).toBe(30_000);
+    expect(saved.metrics).toEqual({ interaction_count: 0, copy_events: 0, paste_events: 0 });
+    expect(saved.syncStatus).toBe("pending");
+    expect(saved.createdAt).toBe(endTime);
   });
 
   it("does not start a session for null domain", async () => {
@@ -35,52 +43,22 @@ describe("SessionTracker", () => {
     expect(tracker.getActiveSession()).toBeNull();
   });
 
-  it("ends session when switching to non-AI tab (domain=null)", async () => {
+  it("ends session when switching to non-AI tab", async () => {
     const tracker = new SessionTracker();
     const startTime = 1_000_000_000_000;
-    vi.spyOn(Date, "now").mockReturnValue(startTime);
 
+    vi.spyOn(Date, "now").mockReturnValue(startTime);
     await tracker.onTabFocused("claude.ai");
-    expect(tracker.getActiveSession()).not.toBeNull();
 
     vi.spyOn(Date, "now").mockReturnValue(startTime + 20_000);
     await tracker.onTabFocused(null);
 
     expect(tracker.getActiveSession()).toBeNull();
-    const sessions = await db.sessions.toArray();
+    const sessions = await db.activitySessions.toArray();
     expect(sessions).toHaveLength(1);
   });
 
-  it("saved session has correct fields", async () => {
-    const tracker = new SessionTracker();
-    const startTime = 1_000_000_000_000;
-    const endTime = startTime + 30_000;
-    const BADGE_EXPIRY_MS = 24 * 60 * 60 * 1000;
-
-    vi.spyOn(Date, "now").mockReturnValue(startTime);
-    await tracker.onTabFocused("claude.ai");
-
-    vi.spyOn(Date, "now").mockReturnValue(endTime);
-    await tracker.onTabFocused(null);
-
-    const sessions = await db.sessions.toArray();
-    expect(sessions).toHaveLength(1);
-    const session = sessions[0];
-
-    expect(session.id).toMatch(/^sess-/);
-    expect(session.domain).toBe("claude.ai");
-    expect(session.startedAt).toBe(startTime);
-    expect(session.endedAt).toBe(endTime);
-    expect(session.activeSeconds).toBe(30);
-    expect(session.date).toBe(new Date(startTime).toISOString().slice(0, 10));
-    expect(session.activityType).toBeNull();
-    expect(session.estimatedWithoutMinutes).toBeNull();
-    expect(session.timeSavedMinutes).toBeNull();
-    expect(session.logged).toBe(false);
-    expect(session.badgeExpiry).toBe(endTime + BADGE_EXPIRY_MS);
-  });
-
-  it("switches domain — ends old session, starts new one", async () => {
+  it("switches domain and closes previous session", async () => {
     const tracker = new SessionTracker();
     const startTime = 1_000_000_000_000;
 
@@ -92,7 +70,7 @@ describe("SessionTracker", () => {
 
     expect(tracker.getActiveSession()?.domain).toBe("chatgpt.com");
 
-    const sessions = await db.sessions.toArray();
+    const sessions = await db.activitySessions.toArray();
     expect(sessions).toHaveLength(1);
     expect(sessions[0].domain).toBe("claude.ai");
   });
@@ -108,26 +86,25 @@ describe("SessionTracker", () => {
     await tracker.onIdle();
 
     expect(tracker.getActiveSession()).toBeNull();
-    const sessions = await db.sessions.toArray();
+    const sessions = await db.activitySessions.toArray();
     expect(sessions).toHaveLength(1);
   });
 
-  it("discards micro-sessions under 10 seconds (session not saved to DB)", async () => {
+  it("discards micro-sessions under 10 seconds", async () => {
     const tracker = new SessionTracker();
     const startTime = 1_000_000_000_000;
 
     vi.spyOn(Date, "now").mockReturnValue(startTime);
     await tracker.onTabFocused("claude.ai");
 
-    // Only 9 seconds — below minimum
     vi.spyOn(Date, "now").mockReturnValue(startTime + 9_000);
     await tracker.onTabFocused(null);
 
-    const sessions = await db.sessions.toArray();
+    const sessions = await db.activitySessions.toArray();
     expect(sessions).toHaveLength(0);
   });
 
-  it("saves session with exactly 10 seconds (boundary)", async () => {
+  it("saves session with exactly 10 seconds", async () => {
     const tracker = new SessionTracker();
     const startTime = 1_000_000_000_000;
 
@@ -137,47 +114,67 @@ describe("SessionTracker", () => {
     vi.spyOn(Date, "now").mockReturnValue(startTime + 10_000);
     await tracker.onTabFocused(null);
 
-    const sessions = await db.sessions.toArray();
+    const sessions = await db.activitySessions.toArray();
     expect(sessions).toHaveLength(1);
-    expect(sessions[0].activeSeconds).toBe(10);
+    expect(sessions[0].durationMs).toBe(10_000);
   });
 
-  it("onHeartbeat updates lastSeenAt on active session", () => {
+  it("onHeartbeat updates lastSeenAt", async () => {
+    const tracker = new SessionTracker();
+    const startTime = 1_000_000_000_000;
+    const heartbeatTime = startTime + 5_000;
+
+    vi.spyOn(Date, "now").mockReturnValue(startTime);
+    await tracker.onTabFocused("claude.ai");
+    expect(tracker.getActiveSession()?.lastSeenAt).toBe(startTime);
+
+    vi.spyOn(Date, "now").mockReturnValue(heartbeatTime);
+    tracker.onHeartbeat();
+
+    expect(tracker.getActiveSession()?.lastSeenAt).toBe(heartbeatTime);
+  });
+
+  it("onSignalDelta merges metrics and activity", async () => {
     const tracker = new SessionTracker();
     const startTime = 1_000_000_000_000;
 
     vi.spyOn(Date, "now").mockReturnValue(startTime);
-    // onTabFocused is async, but we can test sync heartbeat behavior by working with internal state
-    tracker.getActiveSession(); // ensure null initially
+    await tracker.onTabFocused("claude.ai");
 
-    // Manually simulate an active session by calling onTabFocused first
-    // We'll use a resolved promise pattern
-    const heartbeatTime = startTime + 5_000;
-
-    // We need to set up the active session first
-    vi.spyOn(Date, "now").mockReturnValue(startTime);
-    const focusPromise = tracker.onTabFocused("claude.ai").then(() => {
-      const sessionAfterFocus = tracker.getActiveSession();
-      expect(sessionAfterFocus?.lastSeenAt).toBe(startTime);
-
-      vi.spyOn(Date, "now").mockReturnValue(heartbeatTime);
-      tracker.onHeartbeat();
-
-      const sessionAfterHeartbeat = tracker.getActiveSession();
-      expect(sessionAfterHeartbeat?.lastSeenAt).toBe(heartbeatTime);
+    tracker.onSignalDelta({
+      interaction_count: 2,
+      copy_events: 1,
+      paste_events: 3,
+      activityTs: startTime + 1_000,
     });
 
-    return focusPromise;
+    tracker.onSignalDelta({
+      interaction_count: 4,
+      copy_events: 0,
+      paste_events: 2,
+      activityTs: startTime + 80_000,
+    });
+
+    vi.spyOn(Date, "now").mockReturnValue(startTime + 140_000);
+    await tracker.onTabFocused(null);
+
+    const sessions = await db.activitySessions.toArray();
+    expect(sessions).toHaveLength(1);
+
+    const saved = sessions[0];
+    expect(saved.metrics).toEqual({ interaction_count: 6, copy_events: 1, paste_events: 5 });
+    expect(saved.durationMs).toBe(140_000);
+    expect(saved.activeMs).toBe(121_000);
   });
 
-  it("onHeartbeat is a no-op when no active session", () => {
+  it("onSignalDelta is no-op with no active session", async () => {
     const tracker = new SessionTracker();
-    // Should not throw
-    expect(() => tracker.onHeartbeat()).not.toThrow();
-    expect(tracker.getActiveSession()).toBeNull();
+
+    expect(() => tracker.onSignalDelta({ interaction_count: 1, activityTs: Date.now() })).not.toThrow();
+    expect(await db.activitySessions.toArray()).toHaveLength(0);
   });
 
-  it("does not end session when focusing the same domain again", async () => {
+  it("does not end session when focusing same domain", async () => {
     const tracker = new SessionTracker();
     const startTime = 1_000_000_000_000;
 
@@ -189,9 +186,7 @@ describe("SessionTracker", () => {
     await tracker.onTabFocused("claude.ai");
     const session2 = tracker.getActiveSession();
 
-    // Same session should still be active
     expect(session1?.id).toBe(session2?.id);
-    const sessions = await db.sessions.toArray();
-    expect(sessions).toHaveLength(0);
+    expect(await db.activitySessions.toArray()).toHaveLength(0);
   });
 });

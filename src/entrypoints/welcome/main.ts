@@ -15,23 +15,10 @@ const uniqueDomains = AI_DOMAINS.filter(
   (d, i, arr) => arr.findIndex((x) => x.label === d.label) === i
 );
 
-const DEFAULT_ACTIVITIES = ["Writing", "Code", "Research", "Creative", "Other"];
-
-interface ActivityItem {
-  name: string;
-  enabled: boolean;
-  custom: boolean;
-}
-
-let activityItems: ActivityItem[] = [];
-
 // --- DOM refs ---
 const grid = document.getElementById("domain-grid")!;
 const customInput = document.getElementById("custom-input") as HTMLInputElement;
 const addCustomBtn = document.getElementById("add-custom-btn")!;
-const activityGrid = document.getElementById("activity-grid")!;
-const activityInput = document.getElementById("activity-input") as HTMLInputElement;
-const addActivityBtn = document.getElementById("add-activity-btn")!;
 const toastCheckbox = document.getElementById("toast-checkbox") as HTMLInputElement;
 const ctaBtn = document.getElementById("cta")!;
 const tokenInput = document.getElementById("token-input") as HTMLInputElement;
@@ -93,32 +80,11 @@ async function init() {
     });
   }
 
-  const savedEnabledActivities = await db.config.get("enabledActivities");
-  const savedCustomActivities = await db.config.get("customActivities");
-  const enabledSet = savedEnabledActivities
-    ? new Set(savedEnabledActivities.value as string[])
-    : null;
-  const customList = (savedCustomActivities?.value as string[]) ?? [];
-
-  activityItems = DEFAULT_ACTIVITIES.map((name) => ({
-    name,
-    enabled: enabledSet ? enabledSet.has(name) : true,
-    custom: false,
-  }));
-  for (const name of customList) {
-    activityItems.push({
-      name,
-      enabled: enabledSet ? enabledSet.has(name) : true,
-      custom: true,
-    });
-  }
-
   if (toastConfig?.value === true) {
     toastCheckbox.checked = true;
   }
 
   renderGrid();
-  renderActivities();
 }
 
 init();
@@ -162,63 +128,6 @@ customInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     addCustomDomain();
-  }
-});
-
-// --- Activity types ---
-function renderActivities() {
-  activityGrid.innerHTML = "";
-  for (const item of activityItems) {
-    const label = document.createElement("label");
-    label.className = "domain-item";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = item.enabled;
-    checkbox.addEventListener("change", () => {
-      item.enabled = checkbox.checked;
-    });
-
-    const span = document.createElement("span");
-    span.className = "domain-label";
-    span.textContent = item.name;
-
-    label.appendChild(checkbox);
-    label.appendChild(span);
-
-    if (item.custom) {
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "btn-remove";
-      removeBtn.textContent = "×";
-      removeBtn.type = "button";
-      removeBtn.addEventListener("click", () => {
-        activityItems = activityItems.filter((a) => a !== item);
-        renderActivities();
-      });
-      label.appendChild(removeBtn);
-    }
-
-    activityGrid.appendChild(label);
-  }
-}
-
-function addCustomActivity() {
-  const raw = activityInput.value.trim();
-  if (!raw) return;
-  if (activityItems.some((a) => a.name.toLowerCase() === raw.toLowerCase())) {
-    activityInput.value = "";
-    return;
-  }
-  activityItems.push({ name: raw, enabled: true, custom: true });
-  activityInput.value = "";
-  renderActivities();
-}
-
-addActivityBtn.addEventListener("click", addCustomActivity);
-activityInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    addCustomActivity();
   }
 });
 
@@ -312,13 +221,7 @@ ctaBtn.addEventListener("click", async () => {
     });
   }
 
-  // 5. Save activity config
-  const enabledActivities = activityItems.filter((a) => a.enabled).map((a) => a.name);
-  const customActivityNames = activityItems.filter((a) => a.custom).map((a) => a.name);
-  await db.config.put({ key: "enabledActivities", value: enabledActivities });
-  await db.config.put({ key: "customActivities", value: customActivityNames });
-
-  // Handle toast opt-in/out
+  // 5. Handle toast opt-in/out
   if (toastCheckbox.checked) {
     try {
       const granted = await chrome.permissions.request({
